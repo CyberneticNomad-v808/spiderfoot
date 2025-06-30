@@ -131,7 +131,7 @@ class SpiderFoot:
         """SOCKS proxy.
 
         Bit of a hack to support SOCKS because of the loading order of
-        modules. sfscan will call this to update the socket reference
+        modules. scanner will call this to update the socket reference
         to the SOCKS one.
 
         Args:
@@ -330,6 +330,9 @@ class SpiderFoot:
             return storeopts
 
         for opt in list(opts.keys()):
+            # Only process string keys
+            if not isinstance(opt, str):
+                continue  # or optionally log a warning
             # Filter out system temporary variables like GUID and others
             if opt.startswith('__') and filterSystem:
                 continue
@@ -343,7 +346,7 @@ class SpiderFoot:
                 else:
                     storeopts[opt] = 0
             if isinstance(opts[opt], list):
-                storeopts[opt] = ','.join(opts[opt])
+                storeopts[opt] = ','.join(str(x) for x in opts[opt])
 
         if '__modules__' not in opts:
             return storeopts
@@ -353,12 +356,18 @@ class SpiderFoot:
                 f"opts['__modules__'] is {type(opts['__modules__'])}; expected dict()")
 
         for mod in opts['__modules__']:
-            for opt in opts['__modules__'][mod]['opts']:
+            # Defensive: skip if 'opts' is missing or not a dict
+            mod_opts = opts['__modules__'][mod].get('opts', {})
+            if not isinstance(mod_opts, dict):
+                continue
+            for opt in mod_opts:
+                if not isinstance(opt, str):
+                    continue
                 if opt.startswith('_') and filterSystem:
                     continue
 
                 mod_opt = f"{mod}:{opt}"
-                mod_opt_val = opts['__modules__'][mod]['opts'][opt]
+                mod_opt_val = mod_opts[opt]
 
                 if isinstance(mod_opt_val, (int, str)):
                     storeopts[mod_opt] = mod_opt_val
