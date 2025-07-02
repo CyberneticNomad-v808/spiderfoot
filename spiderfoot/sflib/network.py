@@ -181,13 +181,6 @@ def fetchUrl(url: str, cookies: str = None, timeout: int = 30, useragent: str = 
         return None
     if not url or not url.strip():
         return None
-    result = {
-        'code': None,
-        'status': None,
-        'content': None,
-        'headers': None,
-        'realurl': url
-    }
     url = url.strip()
     try:
         parsed_url = urllib.parse.urlparse(url)
@@ -195,6 +188,13 @@ def fetchUrl(url: str, cookies: str = None, timeout: int = 30, useragent: str = 
         return None
     if parsed_url.scheme not in ['http', 'https']:
         return None
+    result = {
+        'code': None,
+        'status': None,
+        'content': None,
+        'headers': None,
+        'realurl': url
+    }
     session = getSession()
     try:
         if headOnly:

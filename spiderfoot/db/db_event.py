@@ -317,10 +317,10 @@ class EventManager:
         storeData = sfEvent.data
         if isinstance(truncateSize, int) and truncateSize > 0:
             storeData = storeData[0:truncateSize]
-        # Store generated as float (seconds)
-        generated_val = float(sfEvent.generated)
+        # Always store generated as int (ms)
+        generated_ms = int(sfEvent.generated * 1000)
         qry = "INSERT INTO tbl_scan_results (scan_instance_id, hash, type, generated, confidence, visibility, risk, module, data, source_event_hash) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
-        qvals = [instanceId, sfEvent.hash, sfEvent.eventType, generated_val, sfEvent.confidence, sfEvent.visibility, sfEvent.risk, sfEvent.module, storeData, sfEvent.sourceEventHash]
+        qvals = [instanceId, sfEvent.hash, sfEvent.eventType, generated_ms, sfEvent.confidence, sfEvent.visibility, sfEvent.risk, sfEvent.module, storeData, sfEvent.sourceEventHash]
         with self.dbhLock:
             try:
                 self.dbh.execute(qry, qvals)
