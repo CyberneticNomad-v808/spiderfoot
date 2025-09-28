@@ -76,7 +76,7 @@ class SpiderFootDb:
         "CREATE TABLE tbl_scan_results ( \
             scan_instance_id    VARCHAR NOT NULL REFERENCES tbl_scan_instance(guid), \
             hash                VARCHAR NOT NULL, \
-            type                VARCHAR NOT NULL REFERENCES tbl_event_types(event), \
+            type                VARCHAR NOT NULL REFERENCES tbl_event_types(event) DEFERRABLE INITIALLY DEFERRED, \
             generated           INT NOT NULL, \
             confidence          INT NOT NULL DEFAULT 100, \
             visibility          INT NOT NULL DEFAULT 100, \
@@ -149,7 +149,7 @@ class SpiderFootDb:
         "CREATE TABLE IF NOT EXISTS tbl_scan_results ( \
             scan_instance_id    VARCHAR NOT NULL REFERENCES tbl_scan_instance(guid), \
             hash                VARCHAR NOT NULL, \
-            type                VARCHAR NOT NULL REFERENCES tbl_event_types(event), \
+            type                VARCHAR NOT NULL REFERENCES tbl_event_types(event) DEFERRABLE INITIALLY DEFERRED, \
             generated           BIGINT NOT NULL, \
             confidence          INT NOT NULL DEFAULT 100, \
             visibility          INT NOT NULL DEFAULT 100, \
