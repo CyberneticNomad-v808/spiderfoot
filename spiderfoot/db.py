@@ -17,8 +17,15 @@ import re
 import sqlite3
 import threading
 import time
-import psycopg2
-import psycopg2.extras
+
+# Import psycopg2 conditionally
+try:
+    import psycopg2
+    import psycopg2.extras
+    HAS_PSYCOPG2 = True
+except ImportError:
+    HAS_PSYCOPG2 = False
+    psycopg2 = None
 
 
 class SpiderFootDb:
@@ -495,6 +502,8 @@ class SpiderFootDb:
                     self.conn.commit()
 
         elif self.db_type == 'postgresql':
+            if not HAS_PSYCOPG2:
+                raise ImportError("psycopg2 is required for PostgreSQL support. Install it with: pip install psycopg2-binary")
             try:
                 self.conn = psycopg2.connect(opts['__database'])
                 self.dbh = self.conn.cursor(
@@ -506,7 +515,7 @@ class SpiderFootDb:
             with self.dbhLock:
                 try:
                     self.dbh.execute('SELECT COUNT(*) FROM tbl_scan_config')
-                except psycopg2.Error:
+                except (psycopg2.Error if psycopg2 else Exception):
                     init = True
                     try:
                         self.create()
@@ -571,7 +580,7 @@ class SpiderFootDb:
 
                     self.dbh.execute(qry, params)
                 self.conn.commit()
-            except (sqlite3.Error, psycopg2.Error) as e:
+            except (sqlite3.Error, psycopg2.Error if psycopg2 else Exception) as e:
                 raise IOError(
                     "SQL error encountered when setting up database") from e
 
@@ -601,7 +610,7 @@ class SpiderFootDb:
                     self.dbh.execute("VACUUM")
                 self.conn.commit()
                 return True
-            except (sqlite3.Error, psycopg2.Error) as e:
+            except (sqlite3.Error, psycopg2.Error if psycopg2 else Exception) as e:
                 raise IOError(
                     "SQL error encountered when vacuuming the database") from e
         return False
@@ -690,7 +699,7 @@ class SpiderFootDb:
             try:
                 self.dbh.execute(qry, qvars)
                 return self.dbh.fetchall()
-            except (sqlite3.Error, psycopg2.Error) as e:
+            except (sqlite3.Error, psycopg2.Error if psycopg2 else Exception) as e:
                 raise IOError(
                     "SQL error encountered when fetching search results") from e
 
@@ -709,7 +718,7 @@ class SpiderFootDb:
             try:
                 self.dbh.execute(qry)
                 return self.dbh.fetchall()
-            except (sqlite3.Error, psycopg2.Error) as e:
+            except (sqlite3.Error, psycopg2.Error if psycopg2 else Exception) as e:
                 raise IOError(
                     "SQL error encountered when retrieving event types") from e
 
@@ -779,7 +788,7 @@ class SpiderFootDb:
                 self.dbh.executemany(qry, inserts)
                 self.conn.commit()
                 return True
-            except (sqlite3.Error, psycopg2.Error) as e:
+            except (sqlite3.Error, psycopg2.Error if psycopg2 else Exception) as e:
                 # More specific error handling
                 if "locked" in str(e).lower() or "thread" in str(e).lower():
                     return False
@@ -834,7 +843,7 @@ class SpiderFootDb:
                     instanceId, time.time() * 1000, component, classification, message
                 ))
                 self.conn.commit()
-            except (sqlite3.Error, psycopg2.Error) as e:
+            except (sqlite3.Error, psycopg2.Error if psycopg2 else Exception) as e:
                 if "locked" not in e.args[0] and "thread" not in e.args[0]:
                     raise IOError(
                         "Unable to log scan event in database") from e
@@ -877,7 +886,7 @@ class SpiderFootDb:
                     instanceId, scanName, scanTarget, time.time() * 1000, 'CREATED'
                 ))
                 self.conn.commit()
-            except (sqlite3.Error, psycopg2.Error) as e:
+            except (sqlite3.Error, psycopg2.Error if psycopg2 else Exception) as e:
                 raise IOError(
                     "Unable to create scan instance in database") from e
 
@@ -955,7 +964,7 @@ class SpiderFootDb:
             try:
                 self.dbh.execute(qry, qvars)
                 return self.dbh.fetchone()
-            except (sqlite3.Error, psycopg2.Error) as e:
+            except (sqlite3.Error, psycopg2.Error if psycopg2 else Exception) as e:
                 raise IOError(
                     "SQL error encountered when retrieving scan instance") from e
 
@@ -1012,7 +1021,7 @@ class SpiderFootDb:
             try:
                 self.dbh.execute(qry, qvars)
                 return self.dbh.fetchall()
-            except (sqlite3.Error, psycopg2.Error) as e:
+            except (sqlite3.Error, psycopg2.Error if psycopg2 else Exception) as e:
                 raise IOError(
                     "SQL error encountered when fetching result summary") from e
 
@@ -1059,7 +1068,7 @@ class SpiderFootDb:
             try:
                 self.dbh.execute(qry, qvars)
                 return self.dbh.fetchall()
-            except (sqlite3.Error, psycopg2.Error) as e:
+            except (sqlite3.Error, psycopg2.Error if psycopg2 else Exception) as e:
                 raise IOError(
                     "SQL error encountered when fetching correlation summary") from e
 
@@ -1093,7 +1102,7 @@ class SpiderFootDb:
             try:
                 self.dbh.execute(qry, qvars)
                 return self.dbh.fetchall()
-            except (sqlite3.Error, psycopg2.Error) as e:
+            except (sqlite3.Error, psycopg2.Error if psycopg2 else Exception) as e:
                 raise IOError(
                     "SQL error encountered when fetching correlation list") from e
 
@@ -1197,7 +1206,7 @@ class SpiderFootDb:
             try:
                 self.dbh.execute(qry, qvars)
                 return self.dbh.fetchall()
-            except (sqlite3.Error, psycopg2.Error) as e:
+            except (sqlite3.Error, psycopg2.Error if psycopg2 else Exception) as e:
                 raise IOError(
                     "SQL error encountered when fetching result events") from e
 
@@ -1242,7 +1251,7 @@ class SpiderFootDb:
             try:
                 self.dbh.execute(qry, qvars)
                 return self.dbh.fetchall()
-            except (sqlite3.Error, psycopg2.Error) as e:
+            except (sqlite3.Error, psycopg2.Error if psycopg2 else Exception) as e:
                 raise IOError(
                     "SQL error encountered when fetching unique result events") from e
 
@@ -1290,7 +1299,7 @@ class SpiderFootDb:
             try:
                 self.dbh.execute(qry, qvars)
                 return self.dbh.fetchall()
-            except (sqlite3.Error, psycopg2.Error) as e:
+            except (sqlite3.Error, psycopg2.Error if psycopg2 else Exception) as e:
                 raise IOError(
                     "SQL error encountered when fetching scan logs") from e
 
@@ -1330,7 +1339,7 @@ class SpiderFootDb:
             try:
                 self.dbh.execute(qry, qvars)
                 return self.dbh.fetchall()
-            except (sqlite3.Error, psycopg2.Error) as e:
+            except (sqlite3.Error, psycopg2.Error if psycopg2 else Exception) as e:
                 raise IOError(
                     "SQL error encountered when fetching scan errors") from e
 
@@ -1365,7 +1374,7 @@ class SpiderFootDb:
                 self.dbh.execute(qry3, qvars)
                 self.dbh.execute(qry4, qvars)
                 self.conn.commit()
-            except (sqlite3.Error, psycopg2.Error) as e:
+            except (sqlite3.Error, psycopg2.Error if psycopg2 else Exception) as e:
                 raise IOError(
                     "SQL error encountered when deleting scan") from e
 
@@ -1402,13 +1411,13 @@ class SpiderFootDb:
                 qvars = [fpFlag, instanceId, resultHash]
                 try:
                     self.dbh.execute(qry, qvars)
-                except (sqlite3.Error, psycopg2.Error) as e:
+                except (sqlite3.Error, psycopg2.Error if psycopg2 else Exception) as e:
                     raise IOError(
                         "SQL error encountered when updating false-positive") from e
 
             try:
                 self.conn.commit()
-            except (sqlite3.Error, psycopg2.Error) as e:
+            except (sqlite3.Error, psycopg2.Error if psycopg2 else Exception) as e:
                 raise IOError(
                     "SQL error encountered when updating false-positive") from e
 
@@ -1449,13 +1458,13 @@ class SpiderFootDb:
 
                 try:
                     self.dbh.execute(qry, qvals)
-                except (sqlite3.Error, psycopg2.Error) as e:
+                except (sqlite3.Error, psycopg2.Error if psycopg2 else Exception) as e:
                     raise IOError(
                         "SQL error encountered when storing config, aborting") from e
 
             try:
                 self.conn.commit()
-            except (sqlite3.Error, psycopg2.Error) as e:
+            except (sqlite3.Error, psycopg2.Error if psycopg2 else Exception) as e:
                 raise IOError(
                     "SQL error encountered when storing config, aborting") from e
 
@@ -1485,7 +1494,7 @@ class SpiderFootDb:
                         retval[f"{scope}:{opt}"] = val
 
                 return retval
-            except (sqlite3.Error, psycopg2.Error) as e:
+            except (sqlite3.Error, psycopg2.Error if psycopg2 else Exception) as e:
                 raise IOError(
                     "SQL error encountered when fetching configuration") from e
 
@@ -1503,7 +1512,7 @@ class SpiderFootDb:
             try:
                 self.dbh.execute(qry)
                 self.conn.commit()
-            except (sqlite3.Error, psycopg2.Error) as e:
+            except (sqlite3.Error, psycopg2.Error if psycopg2 else Exception) as e:
                 raise IOError(
                     "Unable to clear configuration from the database") from e
 
@@ -1541,13 +1550,13 @@ class SpiderFootDb:
 
                 try:
                     self.dbh.execute(qry, qvals)
-                except (sqlite3.Error, psycopg2.Error) as e:
+                except (sqlite3.Error, psycopg2.Error if psycopg2 else Exception) as e:
                     raise IOError(
                         "SQL error encountered when storing config, aborting") from e
 
             try:
                 self.conn.commit()
-            except (sqlite3.Error, psycopg2.Error) as e:
+            except (sqlite3.Error, psycopg2.Error if psycopg2 else Exception) as e:
                 raise IOError(
                     "SQL error encountered when storing config, aborting") from e
 
@@ -1584,7 +1593,7 @@ class SpiderFootDb:
                     else:
                         retval[f"{component}:{opt}"] = val
                 return retval
-            except (sqlite3.Error, psycopg2.Error) as e:
+            except (sqlite3.Error, psycopg2.Error if psycopg2 else Exception) as e:
                 raise IOError(
                     "SQL error encountered when fetching configuration") from e
 
@@ -1697,7 +1706,7 @@ class SpiderFootDb:
             try:
                 self.dbh.execute(qry, qvals)
                 self.conn.commit()
-            except (sqlite3.Error, psycopg2.Error) as e:
+            except (sqlite3.Error, psycopg2.Error if psycopg2 else Exception) as e:
                 raise IOError(
                     f"SQL error encountered when storing event data ({self.dbh})") from e
 
@@ -1729,7 +1738,7 @@ class SpiderFootDb:
             try:
                 self.dbh.execute(qry)
                 return self.dbh.fetchall()
-            except (sqlite3.Error, psycopg2.Error) as e:
+            except (sqlite3.Error, psycopg2.Error if psycopg2 else Exception) as e:
                 raise IOError(
                     "SQL error encountered when fetching scan list") from e
 
@@ -1760,7 +1769,7 @@ class SpiderFootDb:
             try:
                 self.dbh.execute(qry, qvars)
                 return self.dbh.fetchall()
-            except (sqlite3.Error, psycopg2.Error) as e:
+            except (sqlite3.Error, psycopg2.Error if psycopg2 else Exception) as e:
                 raise IOError(
                     f"SQL error encountered when fetching history for scan {instanceId}") from e
 
@@ -1814,7 +1823,7 @@ class SpiderFootDb:
             try:
                 self.dbh.execute(qry, qvars)
                 return self.dbh.fetchall()
-            except (sqlite3.Error, psycopg2.Error) as e:
+            except (sqlite3.Error, psycopg2.Error if psycopg2 else Exception) as e:
                 raise IOError(
                     "SQL error encountered when getting source element IDs") from e
 
@@ -1866,7 +1875,7 @@ class SpiderFootDb:
             try:
                 self.dbh.execute(qry, qvars)
                 return self.dbh.fetchall()
-            except (sqlite3.Error, psycopg2.Error) as e:
+            except (sqlite3.Error, psycopg2.Error if psycopg2 else Exception) as e:
                 raise IOError(
                     "SQL error encountered when getting child element IDs") from e
 
@@ -2033,7 +2042,7 @@ class SpiderFootDb:
             try:
                 self.dbh.execute(qry, qvars)
                 self.conn.commit()
-            except (sqlite3.Error, psycopg2.Error) as e:
+            except (sqlite3.Error, psycopg2.Error if psycopg2 else Exception) as e:
                 raise IOError(
                     "Unable to create correlation result in database") from e
 
@@ -2048,7 +2057,7 @@ class SpiderFootDb:
                 qvars = [correlationId, eventHash]
                 try:
                     self.dbh.execute(qry, qvars)
-                except (sqlite3.Error, psycopg2.Error) as e:
+                except (sqlite3.Error, psycopg2.Error if psycopg2 else Exception) as e:
                     raise IOError("Unable to create correlation result events in database") from e
 
             self.conn.commit()
@@ -2090,7 +2099,7 @@ class SpiderFootDb:
                         'source_event_hash': row[5]
                     })
                 return sources
-            except (sqlite3.Error, psycopg2.Error) as e:
+            except (sqlite3.Error, psycopg2.Error if psycopg2 else Exception) as e:
                 raise IOError("SQL error encountered when fetching event sources") from e
 
     def get_entities(self, scan_id: str, event_hash: str) -> list:
@@ -2128,5 +2137,5 @@ class SpiderFootDb:
                         'source_event_hash': row[5]
                     })
                 return entities
-            except (sqlite3.Error, psycopg2.Error) as e:
+            except (sqlite3.Error, psycopg2.Error if psycopg2 else Exception) as e:
                 raise IOError("SQL error encountered when fetching entity events") from e

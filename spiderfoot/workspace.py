@@ -55,32 +55,62 @@ class SpiderFootWorkspace:
         try:
             with self.db.dbhLock:
                 # Create workspace table if it doesn't exist
-                self.db.dbh.execute("""
-                    CREATE TABLE IF NOT EXISTS tbl_workspaces (
-                        workspace_id TEXT PRIMARY KEY,
-                        name TEXT NOT NULL,
-                        description TEXT,
-                        created_time REAL,
-                        modified_time REAL,
-                        targets TEXT,
-                        scans TEXT,
-                        metadata TEXT,
-                        correlations TEXT,
-                        workflows TEXT
-                    )
-                """)
-                
+                if hasattr(self.db, 'db_type') and self.db.db_type == 'postgresql':
+                    self.db.dbh.execute("""
+                        CREATE TABLE IF NOT EXISTS tbl_workspaces (
+                            workspace_id VARCHAR(255) PRIMARY KEY,
+                            name VARCHAR(255) NOT NULL,
+                            description TEXT,
+                            created_time DOUBLE PRECISION,
+                            modified_time DOUBLE PRECISION,
+                            targets TEXT,
+                            scans TEXT,
+                            metadata TEXT,
+                            correlations TEXT,
+                            workflows TEXT
+                        )
+                    """)
+                else:
+                    self.db.dbh.execute("""
+                        CREATE TABLE IF NOT EXISTS tbl_workspaces (
+                            workspace_id TEXT PRIMARY KEY,
+                            name TEXT NOT NULL,
+                            description TEXT,
+                            created_time REAL,
+                            modified_time REAL,
+                            targets TEXT,
+                            scans TEXT,
+                            metadata TEXT,
+                            correlations TEXT,
+                            workflows TEXT
+                        )
+                    """)
+
                 # Check if we need to add missing columns for existing tables
-                self.db.dbh.execute("PRAGMA table_info(tbl_workspaces)")
-                columns = [col[1] for col in self.db.dbh.fetchall()]
-                
+                if hasattr(self.db, 'db_type') and self.db.db_type == 'postgresql':
+                    self.db.dbh.execute("""
+                        SELECT column_name
+                        FROM information_schema.columns
+                        WHERE table_name = 'tbl_workspaces'
+                    """)
+                    columns = [col[0] for col in self.db.dbh.fetchall()]
+                else:
+                    self.db.dbh.execute("PRAGMA table_info(tbl_workspaces)")
+                    columns = [col[1] for col in self.db.dbh.fetchall()]
+
                 if 'correlations' not in columns:
-                    self.db.dbh.execute("ALTER TABLE tbl_workspaces ADD COLUMN correlations TEXT")
+                    if hasattr(self.db, 'db_type') and self.db.db_type == 'postgresql':
+                        self.db.dbh.execute("ALTER TABLE tbl_workspaces ADD COLUMN IF NOT EXISTS correlations TEXT")
+                    else:
+                        self.db.dbh.execute("ALTER TABLE tbl_workspaces ADD COLUMN correlations TEXT")
                 if 'workflows' not in columns:
-                    self.db.dbh.execute("ALTER TABLE tbl_workspaces ADD COLUMN workflows TEXT")
-                
+                    if hasattr(self.db, 'db_type') and self.db.db_type == 'postgresql':
+                        self.db.dbh.execute("ALTER TABLE tbl_workspaces ADD COLUMN IF NOT EXISTS workflows TEXT")
+                    else:
+                        self.db.dbh.execute("ALTER TABLE tbl_workspaces ADD COLUMN workflows TEXT")
+
                 self.db.conn.commit()
-                
+
         except Exception as e:
             self.log.error(f"Failed to ensure workspace table: {e}")
             raise
@@ -104,40 +134,80 @@ class SpiderFootWorkspace:
                 'correlations': json.dumps(self.correlations),
                 'workflows': json.dumps(self.workflows)
             }
-              # Create workspace table if it doesn't exist
+
+            # Create workspace table if it doesn't exist
             with self.db.dbhLock:
                 try:
                     # Try to create the table with new schema
-                    self.db.dbh.execute("""
-                        CREATE TABLE IF NOT EXISTS tbl_workspaces (
-                            workspace_id TEXT PRIMARY KEY,
-                            name TEXT NOT NULL,
-                            description TEXT,
-                            created_time REAL,
-                            modified_time REAL,
-                            targets TEXT,
-                            scans TEXT,
-                            metadata TEXT,
-                            correlations TEXT,
-                            workflows TEXT
-                        )
-                    """)
-                    
+                    if hasattr(self.db, 'db_type') and self.db.db_type == 'postgresql':
+                        self.db.dbh.execute("""
+                            CREATE TABLE IF NOT EXISTS tbl_workspaces (
+                                workspace_id VARCHAR(255) PRIMARY KEY,
+                                name VARCHAR(255) NOT NULL,
+                                description TEXT,
+                                created_time DOUBLE PRECISION,
+                                modified_time DOUBLE PRECISION,
+                                targets TEXT,
+                                scans TEXT,
+                                metadata TEXT,
+                                correlations TEXT,
+                                workflows TEXT
+                            )
+                        """)
+                    else:
+                        self.db.dbh.execute("""
+                            CREATE TABLE IF NOT EXISTS tbl_workspaces (
+                                workspace_id TEXT PRIMARY KEY,
+                                name TEXT NOT NULL,
+                                description TEXT,
+                                created_time REAL,
+                                modified_time REAL,
+                                targets TEXT,
+                                scans TEXT,
+                                metadata TEXT,
+                                correlations TEXT,
+                                workflows TEXT
+                            )
+                        """)
+
                     # Check if we need to add missing columns for existing tables
-                    self.db.dbh.execute("PRAGMA table_info(tbl_workspaces)")
-                    columns = [col[1] for col in self.db.dbh.fetchall()]
-                    
+                    if hasattr(self.db, 'db_type') and self.db.db_type == 'postgresql':
+                        self.db.dbh.execute("""
+                            SELECT column_name
+                            FROM information_schema.columns
+                            WHERE table_name = 'tbl_workspaces'
+                        """)
+                        columns = [col[0] for col in self.db.dbh.fetchall()]
+                    else:
+                        self.db.dbh.execute("PRAGMA table_info(tbl_workspaces)")
+                        columns = [col[1] for col in self.db.dbh.fetchall()]
+
                     if 'correlations' not in columns:
-                        self.db.dbh.execute("ALTER TABLE tbl_workspaces ADD COLUMN correlations TEXT")
+                        if hasattr(self.db, 'db_type') and self.db.db_type == 'postgresql':
+                            self.db.dbh.execute("ALTER TABLE tbl_workspaces ADD COLUMN IF NOT EXISTS correlations TEXT")
+                        else:
+                            self.db.dbh.execute("ALTER TABLE tbl_workspaces ADD COLUMN correlations TEXT")
                     if 'workflows' not in columns:
-                        self.db.dbh.execute("ALTER TABLE tbl_workspaces ADD COLUMN workflows TEXT")
+                        if hasattr(self.db, 'db_type') and self.db.db_type == 'postgresql':
+                            self.db.dbh.execute("ALTER TABLE tbl_workspaces ADD COLUMN IF NOT EXISTS workflows TEXT")
+                        else:
+                            self.db.dbh.execute("ALTER TABLE tbl_workspaces ADD COLUMN workflows TEXT")
                     
                     # Insert workspace
-                    query = """
-                        INSERT INTO tbl_workspaces 
-                        (workspace_id, name, description, created_time, modified_time, targets, scans, metadata, correlations, workflows)
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                    """
+                    if hasattr(self.db, 'db_type') and self.db.db_type == 'postgresql':
+                        query = """
+                            INSERT INTO tbl_workspaces
+                            (workspace_id, name, description, created_time, modified_time,
+                             targets, scans, metadata, correlations, workflows)
+                            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                        """
+                    else:
+                        query = """
+                            INSERT INTO tbl_workspaces
+                            (workspace_id, name, description, created_time, modified_time,
+                             targets, scans, metadata, correlations, workflows)
+                            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        """
                     self.db.dbh.execute(query, list(workspace_data.values()))
                     self.db.conn.commit()
                     
@@ -154,8 +224,11 @@ class SpiderFootWorkspace:
     def load_workspace(self) -> None:
         """Load workspace from database."""
         try:
-            query = "SELECT * FROM tbl_workspaces WHERE workspace_id = ?"
-            
+            if hasattr(self.db, 'db_type') and self.db.db_type == 'postgresql':
+                query = "SELECT * FROM tbl_workspaces WHERE workspace_id = %s"
+            else:
+                query = "SELECT * FROM tbl_workspaces WHERE workspace_id = ?"
+
             with self.db.dbhLock:
                 self.db.dbh.execute(query, [self.workspace_id])
                 result = self.db.dbh.fetchone()
@@ -183,12 +256,20 @@ class SpiderFootWorkspace:
         try:
             self.modified_time = time.time()
             
-            query = """
-                UPDATE tbl_workspaces 
-                SET name = ?, description = ?, modified_time = ?, 
-                    targets = ?, scans = ?, metadata = ?
-                WHERE workspace_id = ?
-            """
+            if hasattr(self.db, 'db_type') and self.db.db_type == 'postgresql':
+                query = """
+                    UPDATE tbl_workspaces
+                    SET name = %s, description = %s, modified_time = %s,
+                        targets = %s, scans = %s, metadata = %s
+                    WHERE workspace_id = %s
+                """
+            else:
+                query = """
+                    UPDATE tbl_workspaces
+                    SET name = ?, description = ?, modified_time = ?,
+                        targets = ?, scans = ?, metadata = ?
+                    WHERE workspace_id = ?
+                """
             
             values = [
                 self.name, self.description, self.modified_time,
@@ -406,7 +487,10 @@ class SpiderFootWorkspace:
     def delete_workspace(self) -> None:
         """Delete workspace from database."""
         try:
-            query = "DELETE FROM tbl_workspaces WHERE workspace_id = ?"
+            if hasattr(self.db, 'db_type') and self.db.db_type == 'postgresql':
+                query = "DELETE FROM tbl_workspaces WHERE workspace_id = %s"
+            else:
+                query = "DELETE FROM tbl_workspaces WHERE workspace_id = ?"
             with self.db.dbhLock:
                 self.db.dbh.execute(query, [self.workspace_id])
                 self.db.conn.commit()
@@ -430,30 +514,60 @@ class SpiderFootWorkspace:
         
         try:            # Ensure table exists
             with db.dbhLock:
-                db.dbh.execute("""
-                    CREATE TABLE IF NOT EXISTS tbl_workspaces (
-                        workspace_id TEXT PRIMARY KEY,
-                        name TEXT NOT NULL,
-                        description TEXT,
-                        created_time REAL,
-                        modified_time REAL,
-                        targets TEXT,
-                        scans TEXT,
-                        metadata TEXT,
-                        correlations TEXT,
-                        workflows TEXT
-                    )
-                """)
-                
+                if hasattr(db, 'db_type') and db.db_type == 'postgresql':
+                    db.dbh.execute("""
+                        CREATE TABLE IF NOT EXISTS tbl_workspaces (
+                            workspace_id VARCHAR(255) PRIMARY KEY,
+                            name VARCHAR(255) NOT NULL,
+                            description TEXT,
+                            created_time DOUBLE PRECISION,
+                            modified_time DOUBLE PRECISION,
+                            targets TEXT,
+                            scans TEXT,
+                            metadata TEXT,
+                            correlations TEXT,
+                            workflows TEXT
+                        )
+                    """)
+                else:
+                    db.dbh.execute("""
+                        CREATE TABLE IF NOT EXISTS tbl_workspaces (
+                            workspace_id TEXT PRIMARY KEY,
+                            name TEXT NOT NULL,
+                            description TEXT,
+                            created_time REAL,
+                            modified_time REAL,
+                            targets TEXT,
+                            scans TEXT,
+                            metadata TEXT,
+                            correlations TEXT,
+                            workflows TEXT
+                        )
+                    """)
+
                 # Check if we need to add missing columns for existing tables
-                db.dbh.execute("PRAGMA table_info(tbl_workspaces)")
-                columns = [col[1] for col in db.dbh.fetchall()]
-                
+                if hasattr(db, 'db_type') and db.db_type == 'postgresql':
+                    db.dbh.execute("""
+                        SELECT column_name
+                        FROM information_schema.columns
+                        WHERE table_name = 'tbl_workspaces'
+                    """)
+                    columns = [col[0] for col in db.dbh.fetchall()]
+                else:
+                    db.dbh.execute("PRAGMA table_info(tbl_workspaces)")
+                    columns = [col[1] for col in db.dbh.fetchall()]
+
                 if 'correlations' not in columns:
-                    db.dbh.execute("ALTER TABLE tbl_workspaces ADD COLUMN correlations TEXT")
+                    if hasattr(db, 'db_type') and db.db_type == 'postgresql':
+                        db.dbh.execute("ALTER TABLE tbl_workspaces ADD COLUMN IF NOT EXISTS correlations TEXT")
+                    else:
+                        db.dbh.execute("ALTER TABLE tbl_workspaces ADD COLUMN correlations TEXT")
                 if 'workflows' not in columns:
-                    db.dbh.execute("ALTER TABLE tbl_workspaces ADD COLUMN workflows TEXT")
-                
+                    if hasattr(db, 'db_type') and db.db_type == 'postgresql':
+                        db.dbh.execute("ALTER TABLE tbl_workspaces ADD COLUMN IF NOT EXISTS workflows TEXT")
+                    else:
+                        db.dbh.execute("ALTER TABLE tbl_workspaces ADD COLUMN workflows TEXT")
+
                 db.conn.commit()
             
             query = """
