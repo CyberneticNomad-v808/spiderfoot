@@ -81,6 +81,15 @@ class SpiderFootWebUi:
         # 'config' supplied will be the defaults, let's supplement them
         # now with any configuration which may have previously been saved.
         self.defaultConfig = deepcopy(config)
+        # Ensure __dbtype is present in the config passed to SpiderFootDb
+        # This is critical for PostgreSQL support
+        if '__database' in self.defaultConfig and '__dbtype' not in self.defaultConfig:
+            # If __database looks like a PostgreSQL connection string, set the type
+            db_str = str(self.defaultConfig.get('__database', ''))
+            if 'host=' in db_str or 'dbname=' in db_str or 'postgresql://' in db_str:
+                self.defaultConfig['__dbtype'] = 'postgresql'
+            else:
+                self.defaultConfig['__dbtype'] = 'sqlite'
         dbh = SpiderFootDb(self.defaultConfig, init=True)
         sf = SpiderFoot(self.defaultConfig)
         self.config = sf.configUnserialize(dbh.configGet(), self.defaultConfig)

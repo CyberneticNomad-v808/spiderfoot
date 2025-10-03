@@ -217,39 +217,38 @@ def main():
         # Check Python version first
         if sys.version_info < (3, 9):
             print("SpiderFoot requires Python 3.9 or higher.")
-            sys.exit(-1)        # Initialize SpiderFootHelpers dependent configuration after imports are available
-        try:
-            from spiderfoot import SpiderFootHelpers
-            sfConfig['_genericusers'] = ",".join(SpiderFootHelpers.usernamesFromWordlists(['generic-usernames']))
+            sys.exit(-1)
 
-            # Check for PostgreSQL environment variables
-            postgres_host = os.environ.get("POSTGRES_HOST")
-            postgres_db = os.environ.get("POSTGRES_DB")
-            postgres_user = os.environ.get("POSTGRES_USER")
-            postgres_password = os.environ.get("POSTGRES_PASSWORD")
-            postgres_port = os.environ.get("POSTGRES_PORT", "5432")
+        # Initialize SpiderFootHelpers and database configuration
+        # Import SpiderFootHelpers first
+        from spiderfoot import SpiderFootHelpers
 
-            if all([postgres_host, postgres_db, postgres_user, postgres_password]):
-                # Use PostgreSQL
-                connection_string = f"host={postgres_host} dbname={postgres_db} user={postgres_user} password={postgres_password} port={postgres_port}"
-                sfConfig['__database'] = connection_string
-                sfConfig['__dbtype'] = "postgresql"
-                log.info(f"Using PostgreSQL database: {postgres_host}:{postgres_port}/{postgres_db}")
-            else:
-                # Fall back to SQLite
-                sfConfig['__database'] = f"{SpiderFootHelpers.dataPath()}/spiderfoot.db"
-                sfConfig['__dbtype'] = "sqlite"
-                log.info("Using SQLite database")
+        # Configure database BEFORE loading wordlists (wordlist loading can fail)
+        # Check for PostgreSQL environment variables
+        postgres_host = os.environ.get("POSTGRES_HOST")
+        postgres_db = os.environ.get("POSTGRES_DB")
+        postgres_user = os.environ.get("POSTGRES_USER")
+        postgres_password = os.environ.get("POSTGRES_PASSWORD")
+        postgres_port = os.environ.get("POSTGRES_PORT", "5432")
 
-        except Exception as e:
-            log.error(f"Failed to initialize SpiderFootHelpers configuration: {e}")
-            # Use fallback values
-            sfConfig['_genericusers'] = ""
-            # Use a default database path as fallback
-            default_data_path = Path.home() / '.spiderfoot'
-            default_data_path.mkdir(exist_ok=True)
-            sfConfig['__database'] = str(default_data_path / 'spiderfoot.db')
+        if all([postgres_host, postgres_db, postgres_user, postgres_password]):
+            # Use PostgreSQL
+            connection_string = f"host={postgres_host} dbname={postgres_db} user={postgres_user} password={postgres_password} port={postgres_port}"
+            sfConfig['__database'] = connection_string
+            sfConfig['__dbtype'] = "postgresql"
+            log.info(f"Using PostgreSQL database: {postgres_host}:{postgres_port}/{postgres_db}")
+        else:
+            # Fall back to SQLite
+            sfConfig['__database'] = f"{SpiderFootHelpers.dataPath()}/spiderfoot.db"
             sfConfig['__dbtype'] = "sqlite"
+            log.info("Using SQLite database")
+
+        # Load wordlists separately with error handling (don't let this break database config)
+        try:
+            sfConfig['_genericusers'] = ",".join(SpiderFootHelpers.usernamesFromWordlists(['generic-usernames']))
+        except Exception as e:
+            log.warning(f"Failed to load generic usernames wordlist: {e}")
+            sfConfig['_genericusers'] = ""
 
         # Check for legacy database files
         if os.path.exists('spiderfoot.db'):
