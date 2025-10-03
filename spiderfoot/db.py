@@ -43,6 +43,20 @@ class SpiderFootDb:
     # Prevent multithread access to database
     dbhLock = threading.RLock()
 
+    def _placeholder(self, count=1):
+        """Return appropriate SQL placeholder(s) for current database type.
+
+        Args:
+            count: Number of placeholders needed
+
+        Returns:
+            String with placeholders (? for SQLite, %s for PostgreSQL)
+        """
+        if self.db_type == 'sqlite':
+            return ', '.join(['?'] * count) if count > 1 else '?'
+        else:  # postgresql
+            return ', '.join(['%s'] * count) if count > 1 else '%s'
+
     # Queries for creating the SpiderFoot database
     createSchemaQueries = [
         "PRAGMA journal_mode=WAL",
@@ -490,7 +504,7 @@ class SpiderFootDb:
                         event_descr = row[1]
                         event_raw = row[2]
                         event_type = row[3]
-                        qry = "INSERT INTO tbl_event_types (event, event_descr, event_raw, event_type) VALUES (?, ?, ?, ?)"
+                        qry = f"INSERT INTO tbl_event_types (event, event_descr, event_raw, event_type) VALUES ({self._placeholder(4)})"
 
                         try:
                             self.dbh.execute(qry, (
@@ -911,21 +925,22 @@ class SpiderFootDb:
 
         qvars = list()
         qry = "UPDATE tbl_scan_instance SET "
+        ph = self._placeholder()
 
         if started is not None:
-            qry += " started = ?,"
+            qry += f" started = {ph},"
             qvars.append(started)
 
         if ended is not None:
-            qry += " ended = ?,"
+            qry += f" ended = {ph},"
             qvars.append(ended)
 
         if status is not None:
-            qry += " status = ?,"
+            qry += f" status = {ph},"
             qvars.append(status)
 
         # guid = guid is a little hack to avoid messing with , placement above
-        qry += " guid = guid WHERE guid = ?"
+        qry += f" guid = guid WHERE guid = {ph}"
         qvars.append(instanceId)
 
         with self.dbhLock:
@@ -1153,22 +1168,22 @@ class SpiderFootDb:
         if correlationId:
             qry += ", tbl_scan_correlation_results_events ce "
 
-        qry += "WHERE c.scan_instance_id = ? AND c.source_event_hash = s.hash AND \
+        ph = self._placeholder()
+        qry += f"WHERE c.scan_instance_id = {ph} AND c.source_event_hash = s.hash AND \
             s.scan_instance_id = c.scan_instance_id AND t.event = c.type"
 
         qvars = [instanceId]
 
         if correlationId:
-            qry += " AND ce.event_hash = c.hash AND ce.correlation_id = ?"
+            qry += f" AND ce.event_hash = c.hash AND ce.correlation_id = {ph}"
             qvars.append(correlationId)
 
         if eventType != "ALL":
             if isinstance(eventType, list):
-                qry += " AND c.type in (" + \
-                    ','.join(['?'] * len(eventType)) + ")"
+                qry += " AND c.type in (" + self._placeholder(len(eventType)) + ")"
                 qvars.extend(eventType)
             else:
-                qry += " AND c.type = ?"
+                qry += f" AND c.type = {ph}"
                 qvars.append(eventType)
 
         if filterFp:
@@ -1176,28 +1191,26 @@ class SpiderFootDb:
 
         if srcModule:
             if isinstance(srcModule, list):
-                qry += " AND c.module in (" + \
-                    ','.join(['?'] * len(srcModule)) + ")"
+                qry += " AND c.module in (" + self._placeholder(len(srcModule)) + ")"
                 qvars.extend(srcModule)
             else:
-                qry += " AND c.module = ?"
+                qry += f" AND c.module = {ph}"
                 qvars.append(srcModule)
 
         if data:
             if isinstance(data, list):
-                qry += " AND c.data in (" + ','.join(['?'] * len(data)) + ")"
+                qry += " AND c.data in (" + self._placeholder(len(data)) + ")"
                 qvars.extend(data)
             else:
-                qry += " AND c.data = ?"
+                qry += f" AND c.data = {ph}"
                 qvars.append(data)
 
         if sourceId:
             if isinstance(sourceId, list):
-                qry += " AND c.source_event_hash in (" + \
-                    ','.join(['?'] * len(sourceId)) + ")"
+                qry += " AND c.source_event_hash in (" + self._placeholder(len(sourceId)) + ")"
                 qvars.extend(sourceId)
             else:
-                qry += " AND c.source_event_hash = ?"
+                qry += f" AND c.source_event_hash = {ph}"
                 qvars.append(sourceId)
 
         qry += " ORDER BY c.data"
@@ -1234,12 +1247,13 @@ class SpiderFootDb:
             raise TypeError(
                 f"eventType is {type(eventType)}; expected str()") from None
 
-        qry = "SELECT DISTINCT data, type, COUNT(*) FROM tbl_scan_results \
-            WHERE scan_instance_id = ?"
+        ph = self._placeholder()
+        qry = f"SELECT DISTINCT data, type, COUNT(*) FROM tbl_scan_results \
+            WHERE scan_instance_id = {ph}"
         qvars = [instanceId]
 
         if eventType != "ALL":
-            qry += " AND type = ?"
+            qry += f" AND type = {ph}"
             qvars.append(eventType)
 
         if filterFp:
@@ -1276,10 +1290,11 @@ class SpiderFootDb:
             raise TypeError(
                 f"instanceId is {type(instanceId)}; expected str()") from None
 
-        qry = "SELECT generated AS generated, component, \
-            type, message, rowid FROM tbl_scan_log WHERE scan_instance_id = ?"
+        ph = self._placeholder()
+        qry = f"SELECT generated AS generated, component, \
+            type, message, rowid FROM tbl_scan_log WHERE scan_instance_id = {ph}"
         if fromRowId:
-            qry += " and rowid > ?"
+            qry += f" and rowid > {ph}"
 
         qry += " ORDER BY generated "
         if reverse:
@@ -1292,7 +1307,7 @@ class SpiderFootDb:
             qvars.append(str(fromRowId))
 
         if limit is not None:
-            qry += " LIMIT ?"
+            qry += f" LIMIT {ph}"
             qvars.append(str(limit))
 
         with self.dbhLock:
@@ -1326,13 +1341,14 @@ class SpiderFootDb:
             raise TypeError(
                 f"limit is {type(limit)}; expected int()") from None
 
-        qry = "SELECT generated AS generated, component, \
-            message FROM tbl_scan_log WHERE scan_instance_id = ? \
+        ph = self._placeholder()
+        qry = f"SELECT generated AS generated, component, \
+            message FROM tbl_scan_log WHERE scan_instance_id = {ph} \
             AND type = 'ERROR' ORDER BY generated DESC"
         qvars = [instanceId]
 
         if limit:
-            qry += " LIMIT ?"
+            qry += f" LIMIT {ph}"
             qvars.append(str(limit))
 
         with self.dbhLock:
@@ -1361,10 +1377,11 @@ class SpiderFootDb:
             raise TypeError(
                 f"instanceId is {type(instanceId)}; expected str()") from None
 
-        qry1 = "DELETE FROM tbl_scan_instance WHERE guid = ?"
-        qry2 = "DELETE FROM tbl_scan_config WHERE scan_instance_id = ?"
-        qry3 = "DELETE FROM tbl_scan_results WHERE scan_instance_id = ?"
-        qry4 = "DELETE FROM tbl_scan_log WHERE scan_instance_id = ?"
+        ph = self._placeholder()
+        qry1 = f"DELETE FROM tbl_scan_instance WHERE guid = {ph}"
+        qry2 = f"DELETE FROM tbl_scan_config WHERE scan_instance_id = {ph}"
+        qry3 = f"DELETE FROM tbl_scan_results WHERE scan_instance_id = {ph}"
+        qry4 = f"DELETE FROM tbl_scan_log WHERE scan_instance_id = {ph}"
         qvars = [instanceId]
 
         with self.dbhLock:
@@ -1444,7 +1461,13 @@ class SpiderFootDb:
         if not optMap:
             raise ValueError("optMap is empty") from None
 
-        qry = "REPLACE INTO tbl_config (scope, opt, val) VALUES (?, ?, ?)"
+        if self.db_type == 'sqlite':
+            qry = "REPLACE INTO tbl_config (scope, opt, val) VALUES (?, ?, ?)"
+        else:  # postgresql
+            qry = """
+                INSERT INTO tbl_config (scope, opt, val) VALUES (%s, %s, %s)
+                ON CONFLICT (scope, opt) DO UPDATE SET val = EXCLUDED.val
+            """
 
         with self.dbhLock:
             for opt in list(optMap.keys()):
@@ -1535,8 +1558,15 @@ class SpiderFootDb:
         if not optMap:
             raise ValueError("optMap is empty") from None
 
-        qry = "REPLACE INTO tbl_scan_config \
-                (scan_instance_id, component, opt, val) VALUES (?, ?, ?, ?)"
+        if self.db_type == 'sqlite':
+            qry = "REPLACE INTO tbl_scan_config \
+                    (scan_instance_id, component, opt, val) VALUES (?, ?, ?, ?)"
+        else:  # postgresql
+            qry = """
+                INSERT INTO tbl_scan_config (scan_instance_id, component, opt, val)
+                VALUES (%s, %s, %s, %s)
+                ON CONFLICT (scan_instance_id, component, opt) DO UPDATE SET val = EXCLUDED.val
+            """
 
         with self.dbhLock:
             for opt in list(optMap.keys()):
