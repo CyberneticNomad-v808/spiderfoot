@@ -475,6 +475,7 @@ class SpiderFootDb:
                     self.dbh.execute('SELECT COUNT(*) FROM tbl_scan_config')
                     self.conn.create_function("REGEXP", 2, __dbregex__)
                 except sqlite3.Error:
+                    self.conn.rollback()
                     init = True
                     try:
                         self.create()
@@ -530,6 +531,7 @@ class SpiderFootDb:
                 try:
                     self.dbh.execute('SELECT COUNT(*) FROM tbl_scan_config')
                 except (psycopg2.Error if psycopg2 else Exception):
+                    self.conn.rollback()
                     init = True
                     try:
                         self.create()
