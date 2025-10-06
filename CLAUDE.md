@@ -55,6 +55,16 @@ SpiderFoot is an enterprise-grade OSINT automation platform with advanced storag
 
 ## Build Process
 
+### Versioning
+- Current version: **5.2.9** (stored in `/stuff/spiderfoot/VERSION`)
+- Version also defined in `spiderfoot/__version__.py`
+
+### Google Cloud Artifact Registry
+- **Project ID**: `intranet-of-tools`
+- **Repository**: `blkc-foot-enterprise` (us-central1)
+- **Full path**: `us-central1-docker.pkg.dev/intranet-of-tools/blkc-foot-enterprise/spiderfoot-enterprise`
+- **Latest version**: v1.1.1-postgresql (as of 2025-10-03)
+
 ### Quick Build from Source
 ```bash
 # Basic Docker build
@@ -65,6 +75,20 @@ docker-compose -f docker-compose-examples/docker-compose-dev.yml up --build
 
 # Production deployment
 cd docker-compose-examples && ./deploy-production.sh
+```
+
+### Build and Push to Google Artifact Registry
+```bash
+# Build with version tags
+docker build -t us-central1-docker.pkg.dev/intranet-of-tools/blkc-foot-enterprise/spiderfoot-enterprise:5.2.9 \
+             -t us-central1-docker.pkg.dev/intranet-of-tools/blkc-foot-enterprise/spiderfoot-enterprise:latest .
+
+# Push to registry
+docker push us-central1-docker.pkg.dev/intranet-of-tools/blkc-foot-enterprise/spiderfoot-enterprise:5.2.9
+docker push us-central1-docker.pkg.dev/intranet-of-tools/blkc-foot-enterprise/spiderfoot-enterprise:latest
+
+# List images in registry
+gcloud artifacts docker images list us-central1-docker.pkg.dev/intranet-of-tools/blkc-foot-enterprise --include-tags
 ```
 
 ### Build Arguments

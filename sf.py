@@ -224,12 +224,12 @@ def main():
         from spiderfoot import SpiderFootHelpers
 
         # Configure database BEFORE loading wordlists (wordlist loading can fail)
-        # Check for PostgreSQL environment variables
-        postgres_host = os.environ.get("POSTGRES_HOST")
-        postgres_db = os.environ.get("POSTGRES_DB")
-        postgres_user = os.environ.get("POSTGRES_USER")
-        postgres_password = os.environ.get("POSTGRES_PASSWORD")
-        postgres_port = os.environ.get("POSTGRES_PORT", "5432")
+        # Check for PostgreSQL environment variables (SPIDERFOOT_* - all required)
+        postgres_host = os.environ.get("SPIDERFOOT_DB_HOST")
+        postgres_db = os.environ.get("SPIDERFOOT_DB")
+        postgres_user = os.environ.get("SPIDERFOOT_USER")
+        postgres_password = os.environ.get("SPIDERFOOT_PASSWORD")
+        postgres_port = os.environ.get("SPIDERFOOT_DB_PORT")
 
         if all([postgres_host, postgres_db, postgres_user, postgres_password]):
             # Use PostgreSQL

@@ -224,10 +224,8 @@ class SpiderFootWorkspace:
     def load_workspace(self) -> None:
         """Load workspace from database."""
         try:
-            if hasattr(self.db, 'db_type') and self.db.db_type == 'postgresql':
-                query = "SELECT * FROM tbl_workspaces WHERE workspace_id = %s"
-            else:
-                query = "SELECT * FROM tbl_workspaces WHERE workspace_id = ?"
+            ph = self.db._placeholder()
+            query = f"SELECT * FROM tbl_workspaces WHERE workspace_id = {ph}"
 
             with self.db.dbhLock:
                 self.db.dbh.execute(query, [self.workspace_id])
@@ -255,25 +253,18 @@ class SpiderFootWorkspace:
         """Save workspace changes to database."""
         try:
             self.modified_time = time.time()
-            
-            if hasattr(self.db, 'db_type') and self.db.db_type == 'postgresql':
-                query = """
-                    UPDATE tbl_workspaces
-                    SET name = %s, description = %s, modified_time = %s,
-                        targets = %s, scans = %s, metadata = %s
-                    WHERE workspace_id = %s
-                """
-            else:
-                query = """
-                    UPDATE tbl_workspaces
-                    SET name = ?, description = ?, modified_time = ?,
-                        targets = ?, scans = ?, metadata = ?
-                    WHERE workspace_id = ?
-                """
-            
+
+            ph = self.db._placeholder()
+            query = f"""
+                UPDATE tbl_workspaces
+                SET name = {ph}, description = {ph}, modified_time = {ph},
+                    targets = {ph}, scans = {ph}, metadata = {ph}
+                WHERE workspace_id = {ph}
+            """
+
             values = [
                 self.name, self.description, self.modified_time,
-                json.dumps(self.targets), json.dumps(self.scans), 
+                json.dumps(self.targets), json.dumps(self.scans),
                 json.dumps(self.metadata), self.workspace_id
             ]
             
@@ -487,10 +478,8 @@ class SpiderFootWorkspace:
     def delete_workspace(self) -> None:
         """Delete workspace from database."""
         try:
-            if hasattr(self.db, 'db_type') and self.db.db_type == 'postgresql':
-                query = "DELETE FROM tbl_workspaces WHERE workspace_id = %s"
-            else:
-                query = "DELETE FROM tbl_workspaces WHERE workspace_id = ?"
+            ph = self.db._placeholder()
+            query = f"DELETE FROM tbl_workspaces WHERE workspace_id = {ph}"
             with self.db.dbhLock:
                 self.db.dbh.execute(query, [self.workspace_id])
                 self.db.conn.commit()

@@ -2337,9 +2337,14 @@ class SpiderFootWebUi:
                 
                 target_value = target['value']
                 target_type = target.get('type', '')
-                
+
                 self.log.debug(f"[MULTISCAN] Target value: {target_value}, type: {target_type}")
-                
+
+                # Map DOMAIN_NAME to INTERNET_NAME (DOMAIN_NAME is an event type, not a target type)
+                if target_type == 'DOMAIN_NAME':
+                    self.log.debug(f"[MULTISCAN] Mapping DOMAIN_NAME to INTERNET_NAME for target compatibility")
+                    target_type = 'INTERNET_NAME'
+
                 # If target type is not provided or empty, detect it
                 if not target_type:
                     self.log.debug(f"[MULTISCAN] Detecting target type for: {target_value}")

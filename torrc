@@ -1,0 +1,42 @@
+# Minimal Tor configuration for SpiderFoot OSINT
+# Run as SOCKS proxy only, no relay functionality
+
+# SOCKS proxy port - accessible from Docker network
+SocksPort 0.0.0.0:9050
+
+# Allow connections from Docker network and localhost (for healthcheck)
+SocksPolicy accept 127.0.0.1
+SocksPolicy accept 172.16.0.0/12
+SocksPolicy accept 10.0.0.0/8
+SocksPolicy reject *
+
+# Disable relay functionality (proxy only)
+ORPort 0
+DirPort 0
+ExitRelay 0
+
+# Performance tuning for OSINT operations
+CircuitBuildTimeout 10
+LearnCircuitBuildTimeout 0
+MaxCircuitDirtiness 600
+NewCircuitPeriod 15
+
+# DNS handling - only accessible from Docker network
+AutomapHostsOnResolve 1
+DNSPort 5353
+
+# Control port for Tor commands - only accessible from Docker network
+ControlPort 9051
+HashedControlPassword 16:872860B76453A77D60CA2BB8C1A7042072093276A3D701AD684053EC4C
+
+# Logging
+Log notice stdout
+
+# Data directory
+DataDirectory /var/lib/tor
+
+# Disable debugging to reduce container size
+AvoidDiskWrites 1
+
+# Security
+Sandbox 1
