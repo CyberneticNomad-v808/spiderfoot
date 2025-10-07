@@ -59,7 +59,7 @@ class SpiderFootDb:
 
     # Queries for creating the SpiderFoot database
     createSchemaQueries = [
-        # "PRAGMA journal_mode=WAL",  # SQLite only - disabled for PostgreSQL compatibility
+        "PRAGMA journal_mode=WAL",
         "CREATE TABLE tbl_event_types ( \
             event       VARCHAR NOT NULL PRIMARY KEY, \
             event_descr VARCHAR NOT NULL, \
@@ -166,8 +166,7 @@ class SpiderFootDb:
             scan_instance_id    VARCHAR NOT NULL REFERENCES tbl_scan_instance(guid), \
             component           VARCHAR NOT NULL, \
             opt                 VARCHAR NOT NULL, \
-            val                 VARCHAR NOT NULL, \
-            UNIQUE (scan_instance_id, component, opt) \
+            val                 VARCHAR NOT NULL \
         )",
         "CREATE TABLE IF NOT EXISTS tbl_scan_results ( \
             scan_instance_id    VARCHAR NOT NULL REFERENCES tbl_scan_instance(guid), \
@@ -1027,7 +1026,7 @@ class SpiderFootDb:
             qry = f"SELECT r.type, e.event_descr, MAX(ROUND(generated)) AS last_in, \
                 count(*) AS total, count(DISTINCT r.data) as utotal FROM \
                 tbl_scan_results r, tbl_event_types e WHERE e.event = r.type \
-                AND r.scan_instance_id = {ph} GROUP BY r.type, e.event_descr ORDER BY e.event_descr"
+                AND r.scan_instance_id = {ph} GROUP BY r.type ORDER BY e.event_descr"
 
         if by == "module":
             qry = f"SELECT r.module, '', MAX(ROUND(generated)) AS last_in, \
@@ -1084,7 +1083,7 @@ class SpiderFootDb:
         if by == "risk":
             qry = f"SELECT rule_risk, count(*) AS total FROM \
                 tbl_scan_correlation_results \
-                WHERE scan_instance_id = {ph} GROUP BY rule_risk ORDER BY rule_risk"
+                WHERE scan_instance_id = {ph} GROUP BY rule_risk, rule_id ORDER BY rule_id"
 
         if by == "rule":
             qry = f"SELECT rule_id, rule_name, rule_risk, rule_descr, \
@@ -1124,9 +1123,8 @@ class SpiderFootDb:
         qry = f"SELECT c.id, c.title, c.rule_id, c.rule_risk, c.rule_name, \
             c.rule_descr, c.rule_logic, count(e.event_hash) AS event_count FROM \
             tbl_scan_correlation_results c, tbl_scan_correlation_results_events e \
-            WHERE c.scan_instance_id = {ph} AND c.id = e.correlation_id \
-            GROUP BY c.id, c.title, c.rule_id, c.rule_risk, c.rule_name, c.rule_descr, c.rule_logic \
-            ORDER BY c.title, c.rule_risk"
+            WHERE scan_instance_id = {ph} AND c.id = e.correlation_id \
+            GROUP BY c.id ORDER BY c.title, c.rule_risk"
 
         qvars = [instanceId]
 
@@ -1308,12 +1306,8 @@ class SpiderFootDb:
                 f"instanceId is {type(instanceId)}; expected str()") from None
 
         ph = self._placeholder()
-        if self.db_type == 'sqlite':
-            qry = f"SELECT generated AS generated, component, \
-                type, message, rowid FROM tbl_scan_log WHERE scan_instance_id = {ph}"
-        else:  # postgresql - use hash of ctid as rowid equivalent
-            qry = f"SELECT generated AS generated, component, \
-                type, message, (CAST(('x'||lpad(split_part(ctid::text,',' ,1),'8','0'))AS bit(32))::int)*1000000 + (CAST(('x'||lpad(split_part(ctid::text,',',2),'8','0'))AS bit(32))::int) as rowid FROM tbl_scan_log WHERE scan_instance_id = {ph}"
+        qry = f"SELECT generated AS generated, component, \
+            type, message, rowid FROM tbl_scan_log WHERE scan_instance_id = {ph}"
         if fromRowId:
             qry += f" and rowid > {ph}"
 
@@ -1779,12 +1773,11 @@ class SpiderFootDb:
         qry = "SELECT i.guid, i.name, i.seed_target, ROUND(i.created/1000), \
             ROUND(i.started)/1000 as started, ROUND(i.ended)/1000, i.status, COUNT(r.type) \
             FROM tbl_scan_instance i, tbl_scan_results r WHERE i.guid = r.scan_instance_id \
-            AND r.type <> 'ROOT' \
-            GROUP BY i.guid, i.name, i.seed_target, i.created, i.started, i.ended, i.status \
+            AND r.type <> 'ROOT' GROUP BY i.guid \
             UNION ALL \
             SELECT i.guid, i.name, i.seed_target, ROUND(i.created/1000), \
-            ROUND(i.started)/1000 as started, ROUND(i.ended)/1000, i.status, 0 \
-            FROM tbl_scan_instance i WHERE i.guid NOT IN ( \
+            ROUND(i.started)/1000 as started, ROUND(i.ended)/1000, i.status, '0' \
+            FROM tbl_scan_instance i  WHERE i.guid NOT IN ( \
             SELECT distinct scan_instance_id FROM tbl_scan_results WHERE type <> 'ROOT') \
             ORDER BY started DESC"
 
@@ -1815,9 +1808,9 @@ class SpiderFootDb:
                 f"instanceId is {type(instanceId)}; expected str()") from None
 
         ph = self._placeholder()
-        qry = f"SELECT TO_CHAR(TO_TIMESTAMP(generated/1000), 'HH24:MI D') AS hourmin, \
+        qry = f"SELECT STRFTIME('%H:%M %w', generated, 'unixepoch') AS hourmin, \
                 type, COUNT(*) FROM tbl_scan_results \
-                WHERE scan_instance_id = {ph} GROUP BY TO_CHAR(TO_TIMESTAMP(generated/1000), 'HH24:MI D'), type"
+                WHERE scan_instance_id = {ph} GROUP BY hourmin, type"
         qvars = [instanceId]
 
         with self.dbhLock:
@@ -1862,7 +1855,6 @@ class SpiderFootDb:
         # the output of this needs to be aligned with scanResultEvent,
         # as other functions call both expecting the same output.
         ph = self._placeholder()
-        placeholders = ', '.join([ph] * len(hashIds))
         qry = f"SELECT ROUND(c.generated) AS generated, c.data, \
             s.data as source_data, \
             c.module, c.type, c.confidence, c.visibility, c.risk, c.hash, \
@@ -1873,8 +1865,8 @@ class SpiderFootDb:
             tbl_event_types st \
             WHERE c.scan_instance_id = {ph} AND c.source_event_hash = s.hash AND \
             s.scan_instance_id = c.scan_instance_id AND st.event = s.type AND \
-            t.event = c.type AND c.hash IN ({placeholders})"
-        qvars = [instanceId] + hashIds
+            t.event = c.type AND c.hash in ('%s')" % "','".join(hashIds)
+        qvars = [instanceId]
 
         with self.dbhLock:
             try:
@@ -1918,7 +1910,6 @@ class SpiderFootDb:
         # the output of this needs to be aligned with scanResultEvent,
         # as other functions call both expecting the same output.
         ph = self._placeholder()
-        placeholders = ', '.join([ph] * len(hashIds))
         qry = f"SELECT ROUND(c.generated) AS generated, c.data, \
             s.data as source_data, \
             c.module, c.type, c.confidence, c.visibility, c.risk, c.hash, \
@@ -1927,8 +1918,8 @@ class SpiderFootDb:
             FROM tbl_scan_results c, tbl_scan_results s, tbl_event_types t \
             WHERE c.scan_instance_id = {ph} AND c.source_event_hash = s.hash AND \
             s.scan_instance_id = c.scan_instance_id AND \
-            t.event = c.type AND s.hash IN ({placeholders})"
-        qvars = [instanceId] + hashIds
+            t.event = c.type AND s.hash in ('%s')" % "','".join(hashIds)
+        qvars = [instanceId]
 
         with self.dbhLock:
             try:

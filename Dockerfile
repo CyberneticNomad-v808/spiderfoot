@@ -111,6 +111,12 @@ WORKDIR /home/spiderfoot
 # Copy the rest of the application files
 COPY --chown=spiderfoot:spiderfoot . .
 
+# Inject build metadata
+ARG BUILD_DATE
+ARG BUILD_COMMIT
+RUN echo "${BUILD_DATE:-unknown}-${BUILD_COMMIT:-unknown}" > /home/spiderfoot/BUILD_INFO && \
+    chown spiderfoot:spiderfoot /home/spiderfoot/BUILD_INFO
+
 # Copy and set up the startup script
 COPY --chown=root:root docker-entrypoint.sh /usr/local/bin/
 RUN chmod +x /usr/local/bin/docker-entrypoint.sh
