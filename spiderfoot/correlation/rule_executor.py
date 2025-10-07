@@ -95,15 +95,15 @@ class DefaultRuleExecutionStrategy(RuleExecutionStrategy):
 
                 if dbh_lock:
                     with dbh_lock:
-                        dbh.dbh.execute(f"SELECT scan_id, type, data FROM tbl_scan_results WHERE scan_id = {ph} LIMIT 1", [scan_id])
+                        dbh.dbh.execute(f"SELECT scan_instance_id, type, data FROM tbl_scan_results WHERE scan_instance_id = {ph} LIMIT 1", [scan_id])
                         test_row = dbh.dbh.fetchone()
                 else:
                     # For tests without lock
-                    dbh.dbh.execute(f"SELECT scan_id, type, data FROM tbl_scan_results WHERE scan_id = {ph} LIMIT 1", [scan_id])
+                    dbh.dbh.execute(f"SELECT scan_instance_id, type, data FROM tbl_scan_results WHERE scan_instance_id = {ph} LIMIT 1", [scan_id])
                     test_row = dbh.dbh.fetchone()
 
                 # Use simplified schema for tests
-                base_query = f"SELECT scan_id as hash, type, data, 'test_module' as module, 0 as created, 'ROOT' as source_event_hash FROM tbl_scan_results WHERE scan_id = {ph}"
+                base_query = f"SELECT hash, type, data, 'test_module' as module, 0 as created, 'ROOT' as source_event_hash FROM tbl_scan_results WHERE scan_instance_id = {ph}"
                 query_params = [scan_id]
 
             except Exception:

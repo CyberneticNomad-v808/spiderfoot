@@ -157,7 +157,7 @@ class SpiderFoot:
 
         if val.startswith('@'):
             fname = val.split('@')[1]
-            self.info("Loading configuration data from: %s", fname)
+            self.info(f"Loading configuration data from: {fname}")
 
             try:
                 with open(fname, "r", encoding="utf-8") as f:

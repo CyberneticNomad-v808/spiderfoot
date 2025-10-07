@@ -169,14 +169,11 @@ class SpiderFootEvent:
 
     @property
     def hash(self) -> str:
-        """Unique SHA256 hash of the event, or "ROOT".
+        """Unique SHA256 hash of the event.
 
         Returns:
-            str: unique SHA256 hash of the event, or "ROOT"
+            str: unique SHA256 hash of the event
         """
-        if self.eventType == "ROOT":
-            return "ROOT"
-
         digestStr = self.__id.encode('raw_unicode_escape')
         return hashlib.sha256(digestStr).hexdigest()
 

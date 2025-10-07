@@ -189,3 +189,6 @@ include
 .venv
 # Python virtual environment config file #
 pyvenv.cfg
+.sonar/
+*.p12
+sonarqube-blking-cert.pem

@@ -1313,7 +1313,7 @@ class SpiderFootDb:
                 type, message, rowid FROM tbl_scan_log WHERE scan_instance_id = {ph}"
         else:  # postgresql - use hash of ctid as rowid equivalent
             qry = f"SELECT generated AS generated, component, \
-                type, message, (CAST(('x'||lpad(split_part(ctid::text,',' ,1),'8','0'))AS bit(32))::int)*1000000 + (CAST(('x'||lpad(split_part(ctid::text,',',2),'8','0'))AS bit(32))::int) as rowid FROM tbl_scan_log WHERE scan_instance_id = {ph}"
+                type, message, (CAST(('x'||lpad(split_part(replace(replace(ctid::text,'(',''),')',''),',' ,1),'8','0'))AS bit(32))::int)*1000000 + (CAST(('x'||lpad(split_part(replace(replace(ctid::text,'(',''),')',''),',',2),'8','0'))AS bit(32))::int) as rowid FROM tbl_scan_log WHERE scan_instance_id = {ph}"
         if fromRowId:
             qry += f" and rowid > {ph}"
 
