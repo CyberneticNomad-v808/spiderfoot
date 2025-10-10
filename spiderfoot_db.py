@@ -1268,11 +1268,12 @@ class SpiderFootDb:
                 f"instanceId is {type(instanceId)}; expected str()") from None
 
         # PostgreSQL doesn't have rowid, use generated timestamp filtering instead
+        # PostgreSQL also uses %s placeholders instead of ?
         if self.db_type == 'postgresql':
             qry = "SELECT generated AS generated, component, \
-                type, message, generated FROM tbl_scan_log WHERE scan_instance_id = ?"
+                type, message, generated FROM tbl_scan_log WHERE scan_instance_id = %s"
             if fromRowId:
-                qry += " AND generated > ?"
+                qry += " AND generated > %s"
         else:
             qry = "SELECT generated AS generated, component, \
                 type, message, rowid FROM tbl_scan_log WHERE scan_instance_id = ?"
@@ -1290,7 +1291,10 @@ class SpiderFootDb:
             qvars.append(str(fromRowId))
 
         if limit is not None:
-            qry += " LIMIT ?"
+            if self.db_type == 'postgresql':
+                qry += " LIMIT %s"
+            else:
+                qry += " LIMIT ?"
             qvars.append(str(limit))
 
         with self.dbhLock:
