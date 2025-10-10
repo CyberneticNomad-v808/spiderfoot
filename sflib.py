@@ -386,7 +386,11 @@ class SpiderFoot:
                 # Leave out system variables
                 continue
 
+            # If filterSystem=False, preserve system variables even if not in opts
             if opt not in opts:
+                if not (opt.startswith('__') and not filterSystem):
+                    continue
+                # System variable not in DB, keep referencePoint value (already in returnOpts from deepcopy)
                 continue
 
             if isinstance(referencePoint[opt], bool):

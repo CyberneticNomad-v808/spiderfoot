@@ -94,7 +94,8 @@ class SpiderFootWebUi:
         sf = SpiderFoot(self.defaultConfig)
         # Use the passed-in config (which has __modules__) as the reference point
         # instead of self.defaultConfig, so module settings from the database are loaded
-        self.config = sf.configUnserialize(dbh.configGet(), config)
+        # filterSystem=False preserves system variables like __dbtype for PostgreSQL
+        self.config = sf.configUnserialize(dbh.configGet(), config, filterSystem=False)
 
         # Set up logging
         if loggingQueue is None:
@@ -1214,7 +1215,8 @@ class SpiderFootWebUi:
             # Make a new config where the user options override
             # the current system config.
             sf = SpiderFoot(self.config)
-            self.config = sf.configUnserialize(cleanopts, currentopts)
+            # filterSystem=False preserves system variables like __dbtype for PostgreSQL
+            self.config = sf.configUnserialize(cleanopts, currentopts, filterSystem=False)
             dbh.configSet(sf.configSerialize(self.config))
         except Exception as e:
             import logging
@@ -1258,7 +1260,8 @@ class SpiderFootWebUi:
             # Make a new config where the user options override
             # the current system config.
             sf = SpiderFoot(self.config)
-            self.config = sf.configUnserialize(cleanopts, currentopts)
+            # filterSystem=False preserves system variables like __dbtype for PostgreSQL
+            self.config = sf.configUnserialize(cleanopts, currentopts, filterSystem=False)
             dbh.configSet(sf.configSerialize(self.config))
         except Exception as e:
             return json.dumps(["ERROR", f"Processing one or more of your inputs failed: {e}"]).encode('utf-8')
