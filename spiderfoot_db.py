@@ -654,6 +654,8 @@ class SpiderFootDb:
                 "Only one search criteria provided; expected at least two")
 
         qvars = list()
+        placeholder = '%s' if self.db_type == 'postgresql' else '?'
+
         qry = "SELECT ROUND(c.generated) AS generated, c.data, \
             s.data as 'source_data', \
             c.module, c.type, c.confidence, c.visibility, c.risk, c.hash, \
@@ -667,20 +669,20 @@ class SpiderFootDb:
             qry += " AND c.false_positive <> 1 "
 
         if criteria.get('scan_id') is not None:
-            qry += "AND c.scan_instance_id = ? "
+            qry += f"AND c.scan_instance_id = {placeholder} "
             qvars.append(criteria['scan_id'])
 
         if criteria.get('type') is not None:
-            qry += " AND c.type = ? "
+            qry += f" AND c.type = {placeholder} "
             qvars.append(criteria['type'])
 
         if criteria.get('value') is not None:
-            qry += " AND (c.data LIKE ? OR s.data LIKE ?) "
+            qry += f" AND (c.data LIKE {placeholder} OR s.data LIKE {placeholder}) "
             qvars.append(criteria['value'])
             qvars.append(criteria['value'])
 
         if criteria.get('regex') is not None:
-            qry += " AND (c.data REGEXP ? OR s.data REGEXP ?) "
+            qry += f" AND (c.data REGEXP {placeholder} OR s.data REGEXP {placeholder}) "
             qvars.append(criteria['regex'])
             qvars.append(criteria['regex'])
 
@@ -824,9 +826,14 @@ class SpiderFootDb:
         if not component:
             component = "SpiderFoot"
 
-        qry = "INSERT INTO tbl_scan_log \
-            (scan_instance_id, generated, component, type, message) \
-            VALUES (?, ?, ?, ?, ?)"
+        if self.db_type == 'postgresql':
+            qry = "INSERT INTO tbl_scan_log \
+                (scan_instance_id, generated, component, type, message) \
+                VALUES (%s, %s, %s, %s, %s)"
+        else:
+            qry = "INSERT INTO tbl_scan_log \
+                (scan_instance_id, generated, component, type, message) \
+                VALUES (?, ?, ?, ?, ?)"
 
         with self.dbhLock:
             try:
@@ -867,9 +874,14 @@ class SpiderFootDb:
             raise TypeError(
                 f"scanTarget is {type(scanTarget)}; expected str()") from None
 
-        qry = "INSERT INTO tbl_scan_instance \
-            (guid, name, seed_target, created, status) \
-            VALUES (?, ?, ?, ?, ?)"
+        if self.db_type == 'postgresql':
+            qry = "INSERT INTO tbl_scan_instance \
+                (guid, name, seed_target, created, status) \
+                VALUES (%s, %s, %s, %s, %s)"
+        else:
+            qry = "INSERT INTO tbl_scan_instance \
+                (guid, name, seed_target, created, status) \
+                VALUES (?, ?, ?, ?, ?)"
 
         with self.dbhLock:
             try:
@@ -901,22 +913,23 @@ class SpiderFootDb:
                 f"instanceId is {type(instanceId)}; expected str()") from None
 
         qvars = list()
+        placeholder = '%s' if self.db_type == 'postgresql' else '?'
         qry = "UPDATE tbl_scan_instance SET "
 
         if started is not None:
-            qry += " started = ?,"
+            qry += f" started = {placeholder},"
             qvars.append(started)
 
         if ended is not None:
-            qry += " ended = ?,"
+            qry += f" ended = {placeholder},"
             qvars.append(ended)
 
         if status is not None:
-            qry += " status = ?,"
+            qry += f" status = {placeholder},"
             qvars.append(status)
 
         # guid = guid is a little hack to avoid messing with , placement above
-        qry += " guid = guid WHERE guid = ?"
+        qry += f" guid = guid WHERE guid = {placeholder}"
         qvars.append(instanceId)
 
         with self.dbhLock:
@@ -946,9 +959,10 @@ class SpiderFootDb:
             raise TypeError(
                 f"instanceId is {type(instanceId)}; expected str()") from None
 
-        qry = "SELECT name, seed_target, ROUND(created/1000) AS created, \
+        placeholder = '%s' if self.db_type == 'postgresql' else '?'
+        qry = f"SELECT name, seed_target, ROUND(created/1000) AS created, \
             ROUND(started/1000) AS started, ROUND(ended/1000) AS ended, status \
-            FROM tbl_scan_instance WHERE guid = ?"
+            FROM tbl_scan_instance WHERE guid = {placeholder}"
         qvars = [instanceId]
 
         with self.dbhLock:
@@ -986,23 +1000,25 @@ class SpiderFootDb:
         if by not in ["type", "module", "entity"]:
             raise ValueError(f"Invalid filter by value: {by}") from None
 
+        placeholder = '%s' if self.db_type == 'postgresql' else '?'
+
         if by == "type":
-            qry = "SELECT r.type, e.event_descr, MAX(ROUND(generated)) AS last_in, \
+            qry = f"SELECT r.type, e.event_descr, MAX(ROUND(generated)) AS last_in, \
                 count(*) AS total, count(DISTINCT r.data) as utotal FROM \
                 tbl_scan_results r, tbl_event_types e WHERE e.event = r.type \
-                AND r.scan_instance_id = ? GROUP BY r.type ORDER BY e.event_descr"
+                AND r.scan_instance_id = {placeholder} GROUP BY r.type ORDER BY e.event_descr"
 
         if by == "module":
-            qry = "SELECT r.module, '', MAX(ROUND(generated)) AS last_in, \
+            qry = f"SELECT r.module, '', MAX(ROUND(generated)) AS last_in, \
                 count(*) AS total, count(DISTINCT r.data) as utotal FROM \
                 tbl_scan_results r, tbl_event_types e WHERE e.event = r.type \
-                AND r.scan_instance_id = ? GROUP BY r.module ORDER BY r.module DESC"
+                AND r.scan_instance_id = {placeholder} GROUP BY r.module ORDER BY r.module DESC"
 
         if by == "entity":
-            qry = "SELECT r.data, e.event_descr, MAX(ROUND(generated)) AS last_in, \
+            qry = f"SELECT r.data, e.event_descr, MAX(ROUND(generated)) AS last_in, \
                 count(*) AS total, count(DISTINCT r.data) as utotal FROM \
                 tbl_scan_results r, tbl_event_types e WHERE e.event = r.type \
-                AND r.scan_instance_id = ? \
+                AND r.scan_instance_id = {placeholder} \
                 AND e.event_type in ('ENTITY') \
                 GROUP BY r.data, e.event_descr ORDER BY total DESC limit 50"
 
@@ -1042,16 +1058,18 @@ class SpiderFootDb:
         if by not in ["rule", "risk"]:
             raise ValueError(f"Invalid filter by value: {by}") from None
 
+        placeholder = '%s' if self.db_type == 'postgresql' else '?'
+
         if by == "risk":
-            qry = "SELECT rule_risk, count(*) AS total FROM \
+            qry = f"SELECT rule_risk, count(*) AS total FROM \
                 tbl_scan_correlation_results \
-                WHERE scan_instance_id = ? GROUP BY rule_risk ORDER BY rule_id"
+                WHERE scan_instance_id = {placeholder} GROUP BY rule_risk ORDER BY rule_id"
 
         if by == "rule":
-            qry = "SELECT rule_id, rule_name, rule_risk, rule_descr, \
+            qry = f"SELECT rule_id, rule_name, rule_risk, rule_descr, \
                 count(*) AS total FROM \
                 tbl_scan_correlation_results \
-                WHERE scan_instance_id = ? GROUP BY rule_id ORDER BY rule_id"
+                WHERE scan_instance_id = {placeholder} GROUP BY rule_id ORDER BY rule_id"
 
         qvars = [instanceId]
 
@@ -1081,10 +1099,11 @@ class SpiderFootDb:
             raise TypeError(
                 f"instanceId is {type(instanceId)}; expected str()") from None
 
-        qry = "SELECT c.id, c.title, c.rule_id, c.rule_risk, c.rule_name, \
+        placeholder = '%s' if self.db_type == 'postgresql' else '?'
+        qry = f"SELECT c.id, c.title, c.rule_id, c.rule_risk, c.rule_name, \
             c.rule_descr, c.rule_logic, count(e.event_hash) AS event_count FROM \
             tbl_scan_correlation_results c, tbl_scan_correlation_results_events e \
-            WHERE scan_instance_id = ? AND c.id = e.correlation_id \
+            WHERE scan_instance_id = {placeholder} AND c.id = e.correlation_id \
             GROUP BY c.id ORDER BY c.title, c.rule_risk"
 
         qvars = [instanceId]
@@ -1134,6 +1153,8 @@ class SpiderFootDb:
             raise TypeError(
                 f"eventType is {type(eventType)}; expected str() or list()") from None
 
+        placeholder = '%s' if self.db_type == 'postgresql' else '?'
+
         qry = "SELECT ROUND(c.generated) AS generated, c.data, \
             s.data as 'source_data', \
             c.module, c.type, c.confidence, c.visibility, c.risk, c.hash, \
@@ -1144,22 +1165,22 @@ class SpiderFootDb:
         if correlationId:
             qry += ", tbl_scan_correlation_results_events ce "
 
-        qry += "WHERE c.scan_instance_id = ? AND c.source_event_hash = s.hash AND \
+        qry += f"WHERE c.scan_instance_id = {placeholder} AND c.source_event_hash = s.hash AND \
             s.scan_instance_id = c.scan_instance_id AND t.event = c.type"
 
         qvars = [instanceId]
 
         if correlationId:
-            qry += " AND ce.event_hash = c.hash AND ce.correlation_id = ?"
+            qry += f" AND ce.event_hash = c.hash AND ce.correlation_id = {placeholder}"
             qvars.append(correlationId)
 
         if eventType != "ALL":
             if isinstance(eventType, list):
                 qry += " AND c.type in (" + \
-                    ','.join(['?'] * len(eventType)) + ")"
+                    ','.join([placeholder] * len(eventType)) + ")"
                 qvars.extend(eventType)
             else:
-                qry += " AND c.type = ?"
+                qry += f" AND c.type = {placeholder}"
                 qvars.append(eventType)
 
         if filterFp:
@@ -1168,27 +1189,27 @@ class SpiderFootDb:
         if srcModule:
             if isinstance(srcModule, list):
                 qry += " AND c.module in (" + \
-                    ','.join(['?'] * len(srcModule)) + ")"
+                    ','.join([placeholder] * len(srcModule)) + ")"
                 qvars.extend(srcModule)
             else:
-                qry += " AND c.module = ?"
+                qry += f" AND c.module = {placeholder}"
                 qvars.append(srcModule)
 
         if data:
             if isinstance(data, list):
-                qry += " AND c.data in (" + ','.join(['?'] * len(data)) + ")"
+                qry += " AND c.data in (" + ','.join([placeholder] * len(data)) + ")"
                 qvars.extend(data)
             else:
-                qry += " AND c.data = ?"
+                qry += f" AND c.data = {placeholder}"
                 qvars.append(data)
 
         if sourceId:
             if isinstance(sourceId, list):
                 qry += " AND c.source_event_hash in (" + \
-                    ','.join(['?'] * len(sourceId)) + ")"
+                    ','.join([placeholder] * len(sourceId)) + ")"
                 qvars.extend(sourceId)
             else:
-                qry += " AND c.source_event_hash = ?"
+                qry += f" AND c.source_event_hash = {placeholder}"
                 qvars.append(sourceId)
 
         qry += " ORDER BY c.data"
@@ -1225,12 +1246,13 @@ class SpiderFootDb:
             raise TypeError(
                 f"eventType is {type(eventType)}; expected str()") from None
 
-        qry = "SELECT DISTINCT data, type, COUNT(*) FROM tbl_scan_results \
-            WHERE scan_instance_id = ?"
+        placeholder = '%s' if self.db_type == 'postgresql' else '?'
+        qry = f"SELECT DISTINCT data, type, COUNT(*) FROM tbl_scan_results \
+            WHERE scan_instance_id = {placeholder}"
         qvars = [instanceId]
 
         if eventType != "ALL":
-            qry += " AND type = ?"
+            qry += f" AND type = {placeholder}"
             qvars.append(eventType)
 
         if filterFp:
@@ -1328,13 +1350,14 @@ class SpiderFootDb:
             raise TypeError(
                 f"limit is {type(limit)}; expected int()") from None
 
-        qry = "SELECT generated AS generated, component, \
-            message FROM tbl_scan_log WHERE scan_instance_id = ? \
+        placeholder = '%s' if self.db_type == 'postgresql' else '?'
+        qry = f"SELECT generated AS generated, component, \
+            message FROM tbl_scan_log WHERE scan_instance_id = {placeholder} \
             AND type = 'ERROR' ORDER BY generated DESC"
         qvars = [instanceId]
 
         if limit:
-            qry += " LIMIT ?"
+            qry += f" LIMIT {placeholder}"
             qvars.append(str(limit))
 
         with self.dbhLock:
@@ -1363,10 +1386,11 @@ class SpiderFootDb:
             raise TypeError(
                 f"instanceId is {type(instanceId)}; expected str()") from None
 
-        qry1 = "DELETE FROM tbl_scan_instance WHERE guid = ?"
-        qry2 = "DELETE FROM tbl_scan_config WHERE scan_instance_id = ?"
-        qry3 = "DELETE FROM tbl_scan_results WHERE scan_instance_id = ?"
-        qry4 = "DELETE FROM tbl_scan_log WHERE scan_instance_id = ?"
+        placeholder = '%s' if self.db_type == 'postgresql' else '?'
+        qry1 = f"DELETE FROM tbl_scan_instance WHERE guid = {placeholder}"
+        qry2 = f"DELETE FROM tbl_scan_config WHERE scan_instance_id = {placeholder}"
+        qry3 = f"DELETE FROM tbl_scan_results WHERE scan_instance_id = {placeholder}"
+        qry4 = f"DELETE FROM tbl_scan_log WHERE scan_instance_id = {placeholder}"
         qvars = [instanceId]
 
         with self.dbhLock:
@@ -1406,10 +1430,12 @@ class SpiderFootDb:
             raise TypeError(
                 f"resultHashes is {type(resultHashes)}; expected list()") from None
 
+        placeholder = '%s' if self.db_type == 'postgresql' else '?'
+
         with self.dbhLock:
             for resultHash in resultHashes:
-                qry = "UPDATE tbl_scan_results SET false_positive = ? WHERE \
-                    scan_instance_id = ? AND hash = ?"
+                qry = f"UPDATE tbl_scan_results SET false_positive = {placeholder} WHERE \
+                    scan_instance_id = {placeholder} AND hash = {placeholder}"
                 qvars = [fpFlag, instanceId, resultHash]
                 try:
                     self.dbh.execute(qry, qvars)
@@ -1446,7 +1472,8 @@ class SpiderFootDb:
         if not optMap:
             raise ValueError("optMap is empty") from None
 
-        qry = "REPLACE INTO tbl_config (scope, opt, val) VALUES (?, ?, ?)"
+        placeholder = '%s' if self.db_type == 'postgresql' else '?'
+        qry = f"REPLACE INTO tbl_config (scope, opt, val) VALUES ({placeholder}, {placeholder}, {placeholder})"
 
         with self.dbhLock:
             for opt in list(optMap.keys()):
@@ -1537,8 +1564,9 @@ class SpiderFootDb:
         if not optMap:
             raise ValueError("optMap is empty") from None
 
-        qry = "REPLACE INTO tbl_scan_config \
-                (scan_instance_id, component, opt, val) VALUES (?, ?, ?, ?)"
+        placeholder = '%s' if self.db_type == 'postgresql' else '?'
+        qry = f"REPLACE INTO tbl_scan_config \
+                (scan_instance_id, component, opt, val) VALUES ({placeholder}, {placeholder}, {placeholder}, {placeholder})"
 
         with self.dbhLock:
             for opt in list(optMap.keys()):
@@ -1580,8 +1608,9 @@ class SpiderFootDb:
             raise TypeError(
                 f"instanceId is {type(instanceId)}; expected str()") from None
 
-        qry = "SELECT component, opt, val FROM tbl_scan_config \
-                WHERE scan_instance_id = ? ORDER BY component, opt"
+        placeholder = '%s' if self.db_type == 'postgresql' else '?'
+        qry = f"SELECT component, opt, val FROM tbl_scan_config \
+                WHERE scan_instance_id = {placeholder} ORDER BY component, opt"
         qvars = [instanceId]
 
         retval = dict()
@@ -1695,10 +1724,16 @@ class SpiderFootDb:
             storeData = storeData[0:truncateSize]
 
         # retrieve scan results
-        qry = "INSERT INTO tbl_scan_results \
-            (scan_instance_id, hash, type, generated, confidence, \
-            visibility, risk, module, data, source_event_hash) \
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+        if self.db_type == 'postgresql':
+            qry = "INSERT INTO tbl_scan_results \
+                (scan_instance_id, hash, type, generated, confidence, \
+                visibility, risk, module, data, source_event_hash) \
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)"
+        else:
+            qry = "INSERT INTO tbl_scan_results \
+                (scan_instance_id, hash, type, generated, confidence, \
+                visibility, risk, module, data, source_event_hash) \
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
 
         qvals = [instanceId, sfEvent.hash, sfEvent.eventType, sfEvent.generated,
                  sfEvent.confidence, sfEvent.visibility, sfEvent.risk,
@@ -1762,9 +1797,10 @@ class SpiderFootDb:
             raise TypeError(
                 f"instanceId is {type(instanceId)}; expected str()") from None
 
-        qry = "SELECT STRFTIME('%H:%M %w', generated, 'unixepoch') AS hourmin, \
+        placeholder = '%s' if self.db_type == 'postgresql' else '?'
+        qry = f"SELECT STRFTIME('%H:%M %w', generated, 'unixepoch') AS hourmin, \
                 type, COUNT(*) FROM tbl_scan_results \
-                WHERE scan_instance_id = ? GROUP BY hourmin, type"
+                WHERE scan_instance_id = {placeholder} GROUP BY hourmin, type"
         qvars = [instanceId]
 
         with self.dbhLock:
@@ -1806,9 +1842,11 @@ class SpiderFootDb:
                 continue
             hashIds.append(hashId)
 
+        placeholder = '%s' if self.db_type == 'postgresql' else '?'
+
         # the output of this needs to be aligned with scanResultEvent,
         # as other functions call both expecting the same output.
-        qry = "SELECT ROUND(c.generated) AS generated, c.data, \
+        qry = f"SELECT ROUND(c.generated) AS generated, c.data, \
             s.data as 'source_data', \
             c.module, c.type, c.confidence, c.visibility, c.risk, c.hash, \
             c.source_event_hash, t.event_descr, t.event_type, s.scan_instance_id, \
@@ -1816,7 +1854,7 @@ class SpiderFootDb:
             s.type, s.module, st.event_type as 'source_entity_type' \
             FROM tbl_scan_results c, tbl_scan_results s, tbl_event_types t, \
             tbl_event_types st \
-            WHERE c.scan_instance_id = ? AND c.source_event_hash = s.hash AND \
+            WHERE c.scan_instance_id = {placeholder} AND c.source_event_hash = s.hash AND \
             s.scan_instance_id = c.scan_instance_id AND st.event = s.type AND \
             t.event = c.type AND c.hash in ('%s')" % "','".join(hashIds)
         qvars = [instanceId]
@@ -1860,15 +1898,17 @@ class SpiderFootDb:
                 continue
             hashIds.append(hashId)
 
+        placeholder = '%s' if self.db_type == 'postgresql' else '?'
+
         # the output of this needs to be aligned with scanResultEvent,
         # as other functions call both expecting the same output.
-        qry = "SELECT ROUND(c.generated) AS generated, c.data, \
+        qry = f"SELECT ROUND(c.generated) AS generated, c.data, \
             s.data as 'source_data', \
             c.module, c.type, c.confidence, c.visibility, c.risk, c.hash, \
             c.source_event_hash, t.event_descr, t.event_type, s.scan_instance_id, \
             c.false_positive as 'fp', s.false_positive as 'parent_fp' \
             FROM tbl_scan_results c, tbl_scan_results s, tbl_event_types t \
-            WHERE c.scan_instance_id = ? AND c.source_event_hash = s.hash AND \
+            WHERE c.scan_instance_id = {placeholder} AND c.source_event_hash = s.hash AND \
             s.scan_instance_id = c.scan_instance_id AND \
             t.event = c.type AND s.hash in ('%s')" % "','".join(hashIds)
         qvars = [instanceId]
@@ -2034,11 +2074,13 @@ class SpiderFootDb:
         import uuid
         correlation_id = str(uuid.uuid4())
 
+        placeholder = '%s' if self.db_type == 'postgresql' else '?'
+
         with self.dbhLock:
-            qry = "INSERT INTO tbl_scan_correlation_results \
+            qry = f"INSERT INTO tbl_scan_correlation_results \
                 (id, scan_instance_id, title, rule_id, rule_risk, rule_name, \
                 rule_descr, rule_logic) \
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
+                VALUES ({placeholder}, {placeholder}, {placeholder}, {placeholder}, {placeholder}, {placeholder}, {placeholder}, {placeholder})"
             qvars = [correlation_id, instanceId, correlationTitle, ruleId, ruleRisk, ruleName, ruleDescr, ruleYaml]
 
             try:
@@ -2055,7 +2097,7 @@ class SpiderFootDb:
 
             # Insert event hashes for this correlation
             for eventHash in eventHashes:
-                qry = "INSERT INTO tbl_scan_correlation_results_events (correlation_id, event_hash) VALUES (?, ?)"
+                qry = f"INSERT INTO tbl_scan_correlation_results_events (correlation_id, event_hash) VALUES ({placeholder}, {placeholder})"
                 qvars = [correlationId, eventHash]
                 try:
                     self.dbh.execute(qry, qvars)
@@ -2076,13 +2118,14 @@ class SpiderFootDb:
         Returns:
             list: List of dicts with source event details (hash, type, data, module, etc.)
         """
-        qry = """
+        placeholder = '%s' if self.db_type == 'postgresql' else '?'
+        qry = f"""
             SELECT s.hash, s.type, s.data, s.module, s.generated, s.source_event_hash
             FROM tbl_scan_results c
             JOIN tbl_scan_results s
               ON c.source_event_hash = s.hash
-            WHERE c.scan_instance_id = ?
-              AND c.hash = ?
+            WHERE c.scan_instance_id = {placeholder}
+              AND c.hash = {placeholder}
               AND c.source_event_hash != 'ROOT'
         """
         qvars = [scan_id, event_hash]
@@ -2114,11 +2157,12 @@ class SpiderFootDb:
         Returns:
             list: List of dicts with entity event details (hash, type, data, module, etc.)
         """
-        qry = """
+        placeholder = '%s' if self.db_type == 'postgresql' else '?'
+        qry = f"""
             SELECT c.hash, c.type, c.data, c.module, c.generated, c.source_event_hash
             FROM tbl_scan_results c
-            WHERE c.scan_instance_id = ?
-              AND c.source_event_hash = ?
+            WHERE c.scan_instance_id = {placeholder}
+              AND c.source_event_hash = {placeholder}
               AND c.type IN (
                 SELECT event FROM tbl_event_types WHERE event_type = 'ENTITY'
               )
