@@ -92,7 +92,9 @@ class SpiderFootWebUi:
                 self.defaultConfig['__dbtype'] = 'sqlite'
         dbh = SpiderFootDb(self.defaultConfig, init=True)
         sf = SpiderFoot(self.defaultConfig)
-        self.config = sf.configUnserialize(dbh.configGet(), self.defaultConfig)
+        # Use the passed-in config (which has __modules__) as the reference point
+        # instead of self.defaultConfig, so module settings from the database are loaded
+        self.config = sf.configUnserialize(dbh.configGet(), config)
 
         # Set up logging
         if loggingQueue is None:

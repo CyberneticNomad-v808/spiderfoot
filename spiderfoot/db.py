@@ -82,21 +82,21 @@ class SpiderFootDb:
             status      VARCHAR NOT NULL \
         )",
         "CREATE TABLE tbl_scan_log ( \
-            scan_instance_id    VARCHAR NOT NULL REFERENCES tbl_scan_instance(guid), \
+            scan_instance_id    VARCHAR NOT NULL REFERENCES tbl_scan_instance(guid) ON DELETE CASCADE, \
             generated           INT NOT NULL, \
             component           VARCHAR, \
             type                VARCHAR NOT NULL, \
             message             VARCHAR \
         )",
         "CREATE TABLE tbl_scan_config ( \
-            scan_instance_id    VARCHAR NOT NULL REFERENCES tbl_scan_instance(guid), \
+            scan_instance_id    VARCHAR NOT NULL REFERENCES tbl_scan_instance(guid) ON DELETE CASCADE, \
             component           VARCHAR NOT NULL, \
             opt                 VARCHAR NOT NULL, \
             val                 VARCHAR NOT NULL, \
             UNIQUE (scan_instance_id, component, opt) \
         )",
         "CREATE TABLE tbl_scan_results ( \
-            scan_instance_id    VARCHAR NOT NULL REFERENCES tbl_scan_instance(guid), \
+            scan_instance_id    VARCHAR NOT NULL REFERENCES tbl_scan_instance(guid) ON DELETE CASCADE, \
             hash                VARCHAR NOT NULL, \
             type                VARCHAR NOT NULL REFERENCES tbl_event_types(event) DEFERRABLE INITIALLY DEFERRED, \
             generated           INT NOT NULL, \
@@ -110,17 +110,16 @@ class SpiderFootDb:
         )",
         "CREATE TABLE tbl_scan_correlation_results ( \
             id                  VARCHAR NOT NULL PRIMARY KEY, \
-            scan_instance_id    VARCHAR NOT NULL REFERENCES tbl_scan_instance(guid), \
+            scan_instance_id    VARCHAR NOT NULL REFERENCES tbl_scan_instance(guid) ON DELETE CASCADE, \
             title               VARCHAR NOT NULL, \
             rule_risk           VARCHAR NOT NULL, \
-            rule_id             VARCHAR NOT NULL, \
             rule_name           VARCHAR NOT NULL, \
             rule_descr          VARCHAR NOT NULL, \
             rule_logic          VARCHAR NOT NULL \
         )",
         "CREATE TABLE tbl_scan_correlation_results_events ( \
-            correlation_id      VARCHAR NOT NULL REFERENCES tbl_scan_correlation_results(id), \
-            event_hash          VARCHAR NOT NULL REFERENCES tbl_scan_results(hash) \
+            correlation_id      VARCHAR NOT NULL REFERENCES tbl_scan_correlation_results(id) ON DELETE CASCADE, \
+            event_hash          VARCHAR NOT NULL REFERENCES tbl_scan_results(hash) ON DELETE CASCADE \
         )",
         "CREATE INDEX idx_scan_results_id ON tbl_scan_results (scan_instance_id)",
         "CREATE INDEX idx_scan_results_type ON tbl_scan_results (scan_instance_id, type)",
@@ -156,21 +155,21 @@ class SpiderFootDb:
             status      VARCHAR NOT NULL \
         )",
         "CREATE TABLE IF NOT EXISTS tbl_scan_log ( \
-            scan_instance_id    VARCHAR NOT NULL REFERENCES tbl_scan_instance(guid), \
+            scan_instance_id    VARCHAR NOT NULL REFERENCES tbl_scan_instance(guid) ON DELETE CASCADE, \
             generated           BIGINT NOT NULL, \
             component           VARCHAR, \
             type                VARCHAR NOT NULL, \
             message             VARCHAR \
         )",
         "CREATE TABLE IF NOT EXISTS tbl_scan_config ( \
-            scan_instance_id    VARCHAR NOT NULL REFERENCES tbl_scan_instance(guid), \
+            scan_instance_id    VARCHAR NOT NULL REFERENCES tbl_scan_instance(guid) ON DELETE CASCADE, \
             component           VARCHAR NOT NULL, \
             opt                 VARCHAR NOT NULL, \
             val                 VARCHAR NOT NULL, \
             UNIQUE (scan_instance_id, component, opt) \
         )",
         "CREATE TABLE IF NOT EXISTS tbl_scan_results ( \
-            scan_instance_id    VARCHAR NOT NULL REFERENCES tbl_scan_instance(guid), \
+            scan_instance_id    VARCHAR NOT NULL REFERENCES tbl_scan_instance(guid) ON DELETE CASCADE, \
             hash                VARCHAR NOT NULL UNIQUE, \
             type                VARCHAR NOT NULL REFERENCES tbl_event_types(event) DEFERRABLE INITIALLY DEFERRED, \
             generated           BIGINT NOT NULL, \
@@ -184,7 +183,7 @@ class SpiderFootDb:
         )",
         "CREATE TABLE IF NOT EXISTS tbl_scan_correlation_results ( \
             id                  VARCHAR NOT NULL PRIMARY KEY, \
-            scan_instance_id    VARCHAR NOT NULL REFERENCES tbl_scan_instance(guid), \
+            scan_instance_id    VARCHAR NOT NULL REFERENCES tbl_scan_instance(guid) ON DELETE CASCADE, \
             title               VARCHAR NOT NULL, \
             rule_risk           VARCHAR NOT NULL, \
             rule_id             VARCHAR NOT NULL, \
@@ -193,8 +192,8 @@ class SpiderFootDb:
             rule_logic          VARCHAR NOT NULL \
         )",
         "CREATE TABLE IF NOT EXISTS tbl_scan_correlation_results_events ( \
-            correlation_id      VARCHAR NOT NULL REFERENCES tbl_scan_correlation_results(id), \
-            event_hash          VARCHAR NOT NULL REFERENCES tbl_scan_results(hash) \
+            correlation_id      VARCHAR NOT NULL REFERENCES tbl_scan_correlation_results(id) ON DELETE CASCADE, \
+            event_hash          VARCHAR NOT NULL REFERENCES tbl_scan_results(hash) ON DELETE CASCADE \
         )",
         "CREATE INDEX IF NOT EXISTS idx_scan_results_id ON tbl_scan_results (scan_instance_id)",
         "CREATE INDEX IF NOT EXISTS idx_scan_results_type ON tbl_scan_results (scan_instance_id, type)",
@@ -1399,10 +1398,15 @@ class SpiderFootDb:
                 f"instanceId is {type(instanceId)}; expected str()") from None
 
         ph = self._placeholder()
-        qry1 = f"DELETE FROM tbl_scan_instance WHERE guid = {ph}"
-        qry2 = f"DELETE FROM tbl_scan_config WHERE scan_instance_id = {ph}"
-        qry3 = f"DELETE FROM tbl_scan_results WHERE scan_instance_id = {ph}"
-        qry4 = f"DELETE FROM tbl_scan_log WHERE scan_instance_id = {ph}"
+        # Delete child records first, then parent
+        # Correlation events must be deleted before correlation results
+        qry1 = f"DELETE FROM tbl_scan_correlation_results_events WHERE correlation_id IN (SELECT id FROM tbl_scan_correlation_results WHERE scan_instance_id = {ph})"
+        qry2 = f"DELETE FROM tbl_scan_correlation_results WHERE scan_instance_id = {ph}"
+        qry3 = f"DELETE FROM tbl_scan_log WHERE scan_instance_id = {ph}"
+        qry4 = f"DELETE FROM tbl_scan_config WHERE scan_instance_id = {ph}"
+        qry5 = f"DELETE FROM tbl_scan_results WHERE scan_instance_id = {ph}"
+        # Delete parent last
+        qry6 = f"DELETE FROM tbl_scan_instance WHERE guid = {ph}"
         qvars = [instanceId]
 
         with self.dbhLock:
@@ -1411,6 +1415,8 @@ class SpiderFootDb:
                 self.dbh.execute(qry2, qvars)
                 self.dbh.execute(qry3, qvars)
                 self.dbh.execute(qry4, qvars)
+                self.dbh.execute(qry5, qvars)
+                self.dbh.execute(qry6, qvars)
                 self.conn.commit()
             except (sqlite3.Error, psycopg2.Error if psycopg2 else Exception) as e:
                 raise IOError(
