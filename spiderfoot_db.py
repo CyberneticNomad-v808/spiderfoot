@@ -1267,10 +1267,17 @@ class SpiderFootDb:
             raise TypeError(
                 f"instanceId is {type(instanceId)}; expected str()") from None
 
-        qry = "SELECT generated AS generated, component, \
-            type, message, rowid FROM tbl_scan_log WHERE scan_instance_id = ?"
-        if fromRowId:
-            qry += " and rowid > ?"
+        # PostgreSQL doesn't have rowid, use generated timestamp filtering instead
+        if self.db_type == 'postgresql':
+            qry = "SELECT generated AS generated, component, \
+                type, message, generated FROM tbl_scan_log WHERE scan_instance_id = ?"
+            if fromRowId:
+                qry += " AND generated > ?"
+        else:
+            qry = "SELECT generated AS generated, component, \
+                type, message, rowid FROM tbl_scan_log WHERE scan_instance_id = ?"
+            if fromRowId:
+                qry += " AND rowid > ?"
 
         qry += " ORDER BY generated "
         if reverse:
