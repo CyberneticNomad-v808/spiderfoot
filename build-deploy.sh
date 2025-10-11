@@ -30,6 +30,8 @@ build_image() {
     BUILD_COMMIT=$(git rev-parse --short HEAD)
     BUILD_VERS=v${BUILD_DATE}---${BUILD_COMMIT}
 
+    #TODO: exit if any are empty
+
     echo "Build version: ${BUILD_VERS}"
 
     docker build \
@@ -43,6 +45,22 @@ build_image() {
 
     echo -e "${GREEN}Build complete: ${IMAGE_NAME}:${BUILD_VERS}${NC}"
     export BUILD_VERS
+    set_env_build-vers
+}
+
+set_env_build-vers() {
+if grep -q "^BUILD_VERS=" /stuff/blking_local_proxy/.env; then
+    sed -i "s/^BUILD_VERS=.*/BUILD_VERS=${BUILD_VERS}/" /stuff/blking_local_proxy/.env
+else
+    echo "BUILD_VERS=${BUILD_VERS}" >> /stuff/blking_local_proxy/.env
+fi
+}
+
+get_last_build-vers() {
+
+        BUILD_VERS=$(docker images ${IMAGE_NAME} --format "{{.Tag}}" | grep "^v[0-9]" | head -n 1)
+	echo $BUILD_VERS
+
 }
 
 # Push to Google Cloud Artifact Registry
@@ -50,8 +68,16 @@ push_image() {
     echo -e "${GREEN}Pushing image to Artifact Registry...${NC}"
 
     if [ -z "$BUILD_VERS" ]; then
-        echo -e "${RED}Error: BUILD_VERS not set. Run build_image first.${NC}"
-        return 1
+ echo -e "${YELLOW}BUILD_VERS not set, detecting most recent image...${NC}"
+ get_last_build-vers
+ 
+
+        if [ -z "$BUILD_VERS" ]; then
+            echo -e "${RED}Error: No ${IMAGE_NAME} images found. Run build_image first.${NC}"
+            return 1
+        fi
+
+        echo -e "${GREEN}Using detected version: ${BUILD_VERS}${NC}"
     fi
 
     # Authenticate with gcloud
@@ -131,10 +157,20 @@ stop_container() {
 
 # Deploy with docker compose
 deploy() {
-    echo -e "${GREEN}Deploying SpiderFoot...${NC}"
+    if [ -z "$BUILD_VERS" ]; then
+ echo -e "${YELLOW}BUILD_VERS not set, detecting most recent image...${NC}"
+ get_last_build-vers
+ set_env_build-vers
+    fi
+echo -e "${GREEN}Deploying SpiderFoot...${NC}"
 
     cd /stuff/blking_local_proxy
-    docker compose up -d spiderfoot
+
+    if [ "$VERBOSE" = "true" ]; then
+        docker compose up spiderfoot
+    else
+        docker compose up -d spiderfoot
+    fi
 
     echo -e "${GREEN}Deployment complete${NC}"
 }
@@ -151,7 +187,7 @@ full_deploy() {
 
 # Show usage
 usage() {
-    echo "Usage: $0 [command]"
+    echo "Usage: $0 [command] [options]"
     echo ""
     echo "Commands:"
     echo "  build              - Build the Docker image"
@@ -163,8 +199,21 @@ usage() {
     echo "  clean-all          - Remove all local and remote SpiderFoot images"
     echo "  full               - Build, push, stop, and deploy (default)"
     echo ""
-    echo "Example: $0 build"
+    echo "Options:"
+    echo "  --verbose, -verbose  - Show container logs during deploy (no -d flag)"
+    echo ""
+    echo "Examples:"
+    echo "  $0 build"
+    echo "  $0 deploy --verbose"
 }
+
+# Parse flags
+VERBOSE="false"
+for arg in "$@"; do
+    if [ "$arg" = "--verbose" ] || [ "$arg" = "-verbose" ]; then
+        VERBOSE="true"
+    fi
+done
 
 # Main script logic
 case "${1}" in

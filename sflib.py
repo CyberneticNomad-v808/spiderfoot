@@ -1132,15 +1132,14 @@ class SpiderFoot:
     def getSession(self) -> 'requests.sessions.Session':
         """Return requests session object.
 
+        Note: Proxy configuration is handled per-request in fetchUrl() via the
+        proxies parameter, not at the session level. This allows proper per-URL
+        proxy routing based on useProxyForUrl() logic.
+
         Returns:
             requests.sessions.Session: requests session
         """
         session = requests.session()
-        if self.socksProxy:
-            session.proxies = {
-                'http': self.socksProxy,
-                'https': self.socksProxy,
-            }
         return session
 
     def removeUrlCreds(self, url: str) -> str:
@@ -1291,6 +1290,13 @@ class SpiderFoot:
             proxies = {
                 'http': self.socksProxy,
                 'https': self.socksProxy,
+            }
+        else:
+            # Explicitly disable proxy by setting to None
+            # This overrides any session-level proxy settings
+            proxies = {
+                'http': None,
+                'https': None,
             }
 
         header = dict()
