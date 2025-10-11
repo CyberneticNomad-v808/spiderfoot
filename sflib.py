@@ -169,10 +169,15 @@ class SpiderFoot:
         if val.lower().startswith('http://') or val.lower().startswith('https://'):
             try:
                 self.info(f"Downloading configuration data from: {val}")
-                session = self.getSession()
-                res = session.get(val)
+                # Use fetchUrl() instead of getSession() to respect proxy routing logic
+                # This allows infrastructure downloads (like TLD lists) to bypass TOR
+                # while still using TOR for scan targets via useProxyForUrl()
+                result = self.fetchUrl(val, timeout=30, noLog=True)
 
-                return res.content.decode('utf-8')
+                if not result or not result.get('content'):
+                    raise Exception("No content returned")
+
+                return result['content']
             except Exception as e:
                 self.error(f"Unable to open option URL, {val}: {e}")
                 return None
@@ -1191,14 +1196,14 @@ class SpiderFoot:
         """Check if the configured proxy should be used to connect to a
         specified URL.
 
+        Only use TOR proxy for .onion addresses (Tor hidden services).
+        All other addresses use clearnet (direct connection).
+
         Args:
             url (str): The URL to check
 
         Returns:
             bool: should the configured proxy be used?
-
-        Todo:
-            Allow using TOR only for .onion addresses
         """
         host = self.urlFQDN(url).lower()
 
@@ -1215,26 +1220,14 @@ class SpiderFoot:
         if not proxy_port:
             return False
 
-        # Never proxy requests to the proxy host
-        if host == proxy_host.lower():
-            return False        # Never proxy RFC1918 addresses on the LAN or the local network interface
-        if self.validIP(host):
-            if netaddr.IPAddress(host).is_ipv4_private_use():
-                return False
-            if netaddr.IPAddress(host).is_loopback():
-                return False
+        # Only use proxy for .onion addresses (Tor hidden services)
+        if host.endswith('.onion'):
+            self.debug(f"Using TOR proxy for .onion address: {url}")
+            return True
 
-        # Never proxy local hostnames
-        else:
-            neverProxyNames = ['local', 'localhost']
-            if host in neverProxyNames:
-                return False
-
-            for s in neverProxyNames:
-                if host.endswith(s):
-                    return False
-
-        return True
+        # Everything else uses clearnet (no proxy)
+        self.debug(f"Using clearnet (no proxy) for: {url}")
+        return False
 
     def fetchUrl(
         self,

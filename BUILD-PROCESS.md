@@ -29,19 +29,28 @@
   # Region: us-central1
   # Project: my-project-123
   # Repository: spiderfoot-repo
-
-  docker build \
-    --build-arg BUILD_DATE=$(date -u +'%Y-%m-%dT%H:%M:%SZ') \
-    --build-arg BUILD_COMMIT=$(git rev-parse --short HEAD) \
-    -t spiderfoot:latest \
-    .
-
-  docker tag spiderfoot:latest \
-    us-central1-docker.pkg.dev/my-project-123/spiderfoot-repo/spiderfoot:latest
+BUILD_DATE=$(date -u +'%Y%m%dt%H%M%S') \
+&& \
+BUILD_COMMIT=$(git rev-parse --short HEAD) \
+&& \
+BUILD_VERS=v$BUILD_DATE---$BUILD_COMMIT \
+&& \        docker build \
+    --build-arg ${BUILD_DATE}\
+    --build-arg ${BUILD_COMMIT}\
+    -t blkc-spiderfoot:${BUILD_VERS} \
+    . \
+    && \          docker tag blkc-spiderfoot:${BUILD_VERS} \
+    us-central1-docker.pkg.dev/intranet-of-tools/blkc-foot-enterprise/blkc-spiderfoot:${BUILD_VERS}\
+    && \
+    docker push us-central1-docker.pkg.dev/intranet-of-tools/blkc-foot-enterprise/blkc-spiderfoot:${BUILD_VERS}  
+  gcloud auth configure-docker us-central1-docker.pkg.dev  
+  
+  docker tag blkc-spiderfoot:LATEST \
+    us-central1-docker.pkg.dev/my-project-123/spiderfoot-repo/blkc-spiderfoot:LATEST
 
   gcloud auth configure-docker us-central1-docker.pkg.dev
 
-  docker push us-central1-docker.pkg.dev/my-project-123/spiderfoot-repo/spiderfoot:latest
+  docker push us-central1-docker.pkg.dev/my-project-123/spiderfoot-repo/blkc-spiderfoot:LATEST
 
   The build includes metadata injection via BUILD_DATE and BUILD_COMMIT arguments, which gets written to
   /home/spiderfoot/BUILD_INFO in the image.
