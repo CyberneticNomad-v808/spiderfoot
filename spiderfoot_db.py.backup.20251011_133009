@@ -17,15 +17,8 @@ import re
 import sqlite3
 import threading
 import time
-
-# Import psycopg2 conditionally
-try:
-    import psycopg2
-    import psycopg2.extras
-    HAS_PSYCOPG2 = True
-except ImportError:
-    HAS_PSYCOPG2 = False
-    psycopg2 = None
+import psycopg2
+import psycopg2.extras
 
 
 class SpiderFootDb:
@@ -43,23 +36,9 @@ class SpiderFootDb:
     # Prevent multithread access to database
     dbhLock = threading.RLock()
 
-    def _placeholder(self, count=1):
-        """Return appropriate SQL placeholder(s) for current database type.
-
-        Args:
-            count: Number of placeholders needed
-
-        Returns:
-            String with placeholders (? for SQLite, %s for PostgreSQL)
-        """
-        if self.db_type == 'sqlite':
-            return ', '.join(['?'] * count) if count > 1 else '?'
-        else:  # postgresql
-            return ', '.join(['%s'] * count) if count > 1 else '%s'
-
     # Queries for creating the SpiderFoot database
     createSchemaQueries = [
-        # "PRAGMA journal_mode=WAL",  # SQLite only - disabled for PostgreSQL compatibility
+        "PRAGMA journal_mode=WAL",
         "CREATE TABLE tbl_event_types ( \
             event       VARCHAR NOT NULL PRIMARY KEY, \
             event_descr VARCHAR NOT NULL, \
@@ -82,23 +61,22 @@ class SpiderFootDb:
             status      VARCHAR NOT NULL \
         )",
         "CREATE TABLE tbl_scan_log ( \
-            scan_instance_id    VARCHAR NOT NULL REFERENCES tbl_scan_instance(guid) ON DELETE CASCADE, \
+            scan_instance_id    VARCHAR NOT NULL REFERENCES tbl_scan_instance(guid), \
             generated           INT NOT NULL, \
             component           VARCHAR, \
             type                VARCHAR NOT NULL, \
             message             VARCHAR \
         )",
         "CREATE TABLE tbl_scan_config ( \
-            scan_instance_id    VARCHAR NOT NULL REFERENCES tbl_scan_instance(guid) ON DELETE CASCADE, \
+            scan_instance_id    VARCHAR NOT NULL REFERENCES tbl_scan_instance(guid), \
             component           VARCHAR NOT NULL, \
             opt                 VARCHAR NOT NULL, \
-            val                 VARCHAR NOT NULL, \
-            UNIQUE (scan_instance_id, component, opt) \
+            val                 VARCHAR NOT NULL \
         )",
         "CREATE TABLE tbl_scan_results ( \
-            scan_instance_id    VARCHAR NOT NULL REFERENCES tbl_scan_instance(guid) ON DELETE CASCADE, \
+            scan_instance_id    VARCHAR NOT NULL REFERENCES tbl_scan_instance(guid), \
             hash                VARCHAR NOT NULL, \
-            type                VARCHAR NOT NULL REFERENCES tbl_event_types(event) DEFERRABLE INITIALLY DEFERRED, \
+            type                VARCHAR NOT NULL REFERENCES tbl_event_types(event), \
             generated           INT NOT NULL, \
             confidence          INT NOT NULL DEFAULT 100, \
             visibility          INT NOT NULL DEFAULT 100, \
@@ -110,7 +88,7 @@ class SpiderFootDb:
         )",
         "CREATE TABLE tbl_scan_correlation_results ( \
             id                  VARCHAR NOT NULL PRIMARY KEY, \
-            scan_instance_id    VARCHAR NOT NULL REFERENCES tbl_scan_instance(guid) ON DELETE CASCADE, \
+            scan_instance_id    VARCHAR NOT NULL REFERENCES tbl_scan_instance(guid), \
             title               VARCHAR NOT NULL, \
             rule_risk           VARCHAR NOT NULL, \
             rule_id             VARCHAR NOT NULL, \
@@ -119,8 +97,8 @@ class SpiderFootDb:
             rule_logic          VARCHAR NOT NULL \
         )",
         "CREATE TABLE tbl_scan_correlation_results_events ( \
-            correlation_id      VARCHAR NOT NULL REFERENCES tbl_scan_correlation_results(id) ON DELETE CASCADE, \
-            event_hash          VARCHAR NOT NULL REFERENCES tbl_scan_results(hash) ON DELETE CASCADE \
+            correlation_id      VARCHAR NOT NULL REFERENCES tbl_scan_correlation_results(id), \
+            event_hash          VARCHAR NOT NULL REFERENCES tbl_scan_results(hash) \
         )",
         "CREATE INDEX idx_scan_results_id ON tbl_scan_results (scan_instance_id)",
         "CREATE INDEX idx_scan_results_type ON tbl_scan_results (scan_instance_id, type)",
@@ -128,11 +106,8 @@ class SpiderFootDb:
         "CREATE INDEX idx_scan_results_module ON tbl_scan_results(scan_instance_id, module)",
         "CREATE INDEX idx_scan_results_srchash ON tbl_scan_results (scan_instance_id, source_event_hash)",
         "CREATE INDEX idx_scan_logs ON tbl_scan_log (scan_instance_id)",
-        "CREATE INDEX idx_scan_log_generated ON tbl_scan_log (scan_instance_id, generated DESC)",
         "CREATE INDEX idx_scan_correlation ON tbl_scan_correlation_results (scan_instance_id, id)",
-        "CREATE INDEX idx_scan_correlation_title ON tbl_scan_correlation_results (scan_instance_id, title)",
-        "CREATE INDEX idx_scan_correlation_events ON tbl_scan_correlation_results_events (correlation_id)",
-        "CREATE INDEX idx_scan_results_generated ON tbl_scan_results (scan_instance_id, generated DESC)"
+        "CREATE INDEX idx_scan_correlation_events ON tbl_scan_correlation_results_events (correlation_id)"
     ]
 
     # PostgreSQL-specific schema queries
@@ -159,23 +134,22 @@ class SpiderFootDb:
             status      VARCHAR NOT NULL \
         )",
         "CREATE TABLE IF NOT EXISTS tbl_scan_log ( \
-            scan_instance_id    VARCHAR NOT NULL REFERENCES tbl_scan_instance(guid) ON DELETE CASCADE, \
+            scan_instance_id    VARCHAR NOT NULL REFERENCES tbl_scan_instance(guid), \
             generated           BIGINT NOT NULL, \
             component           VARCHAR, \
             type                VARCHAR NOT NULL, \
             message             VARCHAR \
         )",
         "CREATE TABLE IF NOT EXISTS tbl_scan_config ( \
-            scan_instance_id    VARCHAR NOT NULL REFERENCES tbl_scan_instance(guid) ON DELETE CASCADE, \
+            scan_instance_id    VARCHAR NOT NULL REFERENCES tbl_scan_instance(guid), \
             component           VARCHAR NOT NULL, \
             opt                 VARCHAR NOT NULL, \
-            val                 VARCHAR NOT NULL, \
-            UNIQUE (scan_instance_id, component, opt) \
+            val                 VARCHAR NOT NULL \
         )",
         "CREATE TABLE IF NOT EXISTS tbl_scan_results ( \
-            scan_instance_id    VARCHAR NOT NULL REFERENCES tbl_scan_instance(guid) ON DELETE CASCADE, \
+            scan_instance_id    VARCHAR NOT NULL REFERENCES tbl_scan_instance(guid), \
             hash                VARCHAR NOT NULL UNIQUE, \
-            type                VARCHAR NOT NULL REFERENCES tbl_event_types(event) DEFERRABLE INITIALLY DEFERRED, \
+            type                VARCHAR NOT NULL REFERENCES tbl_event_types(event), \
             generated           BIGINT NOT NULL, \
             confidence          INT NOT NULL DEFAULT 100, \
             visibility          INT NOT NULL DEFAULT 100, \
@@ -187,7 +161,7 @@ class SpiderFootDb:
         )",
         "CREATE TABLE IF NOT EXISTS tbl_scan_correlation_results ( \
             id                  VARCHAR NOT NULL PRIMARY KEY, \
-            scan_instance_id    VARCHAR NOT NULL REFERENCES tbl_scan_instance(guid) ON DELETE CASCADE, \
+            scan_instance_id    VARCHAR NOT NULL REFERENCES tbl_scan_instance(guid), \
             title               VARCHAR NOT NULL, \
             rule_risk           VARCHAR NOT NULL, \
             rule_id             VARCHAR NOT NULL, \
@@ -196,8 +170,8 @@ class SpiderFootDb:
             rule_logic          VARCHAR NOT NULL \
         )",
         "CREATE TABLE IF NOT EXISTS tbl_scan_correlation_results_events ( \
-            correlation_id      VARCHAR NOT NULL REFERENCES tbl_scan_correlation_results(id) ON DELETE CASCADE, \
-            event_hash          VARCHAR NOT NULL REFERENCES tbl_scan_results(hash) ON DELETE CASCADE \
+            correlation_id      VARCHAR NOT NULL REFERENCES tbl_scan_correlation_results(id), \
+            event_hash          VARCHAR NOT NULL REFERENCES tbl_scan_results(hash) \
         )",
         "CREATE INDEX IF NOT EXISTS idx_scan_results_id ON tbl_scan_results (scan_instance_id)",
         "CREATE INDEX IF NOT EXISTS idx_scan_results_type ON tbl_scan_results (scan_instance_id, type)",
@@ -205,11 +179,8 @@ class SpiderFootDb:
         "CREATE INDEX IF NOT EXISTS idx_scan_results_module ON tbl_scan_results(scan_instance_id, module)",
         "CREATE INDEX IF NOT EXISTS idx_scan_results_srchash ON tbl_scan_results (scan_instance_id, source_event_hash)",
         "CREATE INDEX IF NOT EXISTS idx_scan_logs ON tbl_scan_log (scan_instance_id)",
-        "CREATE INDEX IF NOT EXISTS idx_scan_log_generated ON tbl_scan_log (scan_instance_id, generated DESC)",
         "CREATE INDEX IF NOT EXISTS idx_scan_correlation ON tbl_scan_correlation_results (scan_instance_id, id)",
-        "CREATE INDEX IF NOT EXISTS idx_scan_correlation_title ON tbl_scan_correlation_results (scan_instance_id, title)",
-        "CREATE INDEX IF NOT EXISTS idx_scan_correlation_events ON tbl_scan_correlation_results_events (correlation_id)",
-        "CREATE INDEX IF NOT EXISTS idx_scan_results_generated ON tbl_scan_results (scan_instance_id, generated DESC)"
+        "CREATE INDEX IF NOT EXISTS idx_scan_correlation_events ON tbl_scan_correlation_results_events (correlation_id)"
     ]
 
     eventDetails = [
@@ -483,7 +454,6 @@ class SpiderFootDb:
                     self.dbh.execute('SELECT COUNT(*) FROM tbl_scan_config')
                     self.conn.create_function("REGEXP", 2, __dbregex__)
                 except sqlite3.Error:
-                    self.conn.rollback()
                     init = True
                     try:
                         self.create()
@@ -513,7 +483,7 @@ class SpiderFootDb:
                         event_descr = row[1]
                         event_raw = row[2]
                         event_type = row[3]
-                        qry = f"INSERT INTO tbl_event_types (event, event_descr, event_raw, event_type) VALUES ({self._placeholder(4)})"
+                        qry = "INSERT INTO tbl_event_types (event, event_descr, event_raw, event_type) VALUES (?, ?, ?, ?)"
 
                         try:
                             self.dbh.execute(qry, (
@@ -525,8 +495,6 @@ class SpiderFootDb:
                     self.conn.commit()
 
         elif self.db_type == 'postgresql':
-            if not HAS_PSYCOPG2:
-                raise ImportError("psycopg2 is required for PostgreSQL support. Install it with: pip install psycopg2-binary")
             try:
                 self.conn = psycopg2.connect(opts['__database'])
                 self.dbh = self.conn.cursor(
@@ -538,8 +506,7 @@ class SpiderFootDb:
             with self.dbhLock:
                 try:
                     self.dbh.execute('SELECT COUNT(*) FROM tbl_scan_config')
-                except (psycopg2.Error if psycopg2 else Exception):
-                    self.conn.rollback()
+                except psycopg2.Error:
                     init = True
                     try:
                         self.create()
@@ -604,7 +571,7 @@ class SpiderFootDb:
 
                     self.dbh.execute(qry, params)
                 self.conn.commit()
-            except (sqlite3.Error, psycopg2.Error if psycopg2 else Exception) as e:
+            except (sqlite3.Error, psycopg2.Error) as e:
                 raise IOError(
                     "SQL error encountered when setting up database") from e
 
@@ -634,7 +601,7 @@ class SpiderFootDb:
                     self.dbh.execute("VACUUM")
                 self.conn.commit()
                 return True
-            except (sqlite3.Error, psycopg2.Error if psycopg2 else Exception) as e:
+            except (sqlite3.Error, psycopg2.Error) as e:
                 raise IOError(
                     "SQL error encountered when vacuuming the database") from e
         return False
@@ -687,11 +654,13 @@ class SpiderFootDb:
                 "Only one search criteria provided; expected at least two")
 
         qvars = list()
+        placeholder = '%s' if self.db_type == 'postgresql' else '?'
+
         qry = "SELECT ROUND(c.generated) AS generated, c.data, \
-            s.data as source_data, \
+            s.data as 'source_data', \
             c.module, c.type, c.confidence, c.visibility, c.risk, c.hash, \
             c.source_event_hash, t.event_descr, t.event_type, c.scan_instance_id, \
-            c.false_positive as fp, s.false_positive as parent_fp \
+            c.false_positive as 'fp', s.false_positive as 'parent_fp' \
             FROM tbl_scan_results c, tbl_scan_results s, tbl_event_types t \
             WHERE s.scan_instance_id = c.scan_instance_id AND \
             t.event = c.type AND c.source_event_hash = s.hash "
@@ -699,22 +668,21 @@ class SpiderFootDb:
         if filterFp:
             qry += " AND c.false_positive <> 1 "
 
-        ph = self._placeholder()
         if criteria.get('scan_id') is not None:
-            qry += f"AND c.scan_instance_id = {ph} "
+            qry += f"AND c.scan_instance_id = {placeholder} "
             qvars.append(criteria['scan_id'])
 
         if criteria.get('type') is not None:
-            qry += f" AND c.type = {ph} "
+            qry += f" AND c.type = {placeholder} "
             qvars.append(criteria['type'])
 
         if criteria.get('value') is not None:
-            qry += f" AND (c.data LIKE {ph} OR s.data LIKE {ph}) "
+            qry += f" AND (c.data LIKE {placeholder} OR s.data LIKE {placeholder}) "
             qvars.append(criteria['value'])
             qvars.append(criteria['value'])
 
         if criteria.get('regex') is not None:
-            qry += f" AND (c.data REGEXP {ph} OR s.data REGEXP {ph}) "
+            qry += f" AND (c.data REGEXP {placeholder} OR s.data REGEXP {placeholder}) "
             qvars.append(criteria['regex'])
             qvars.append(criteria['regex'])
 
@@ -724,7 +692,7 @@ class SpiderFootDb:
             try:
                 self.dbh.execute(qry, qvars)
                 return self.dbh.fetchall()
-            except (sqlite3.Error, psycopg2.Error if psycopg2 else Exception) as e:
+            except (sqlite3.Error, psycopg2.Error) as e:
                 raise IOError(
                     "SQL error encountered when fetching search results") from e
 
@@ -743,7 +711,7 @@ class SpiderFootDb:
             try:
                 self.dbh.execute(qry)
                 return self.dbh.fetchall()
-            except (sqlite3.Error, psycopg2.Error if psycopg2 else Exception) as e:
+            except (sqlite3.Error, psycopg2.Error) as e:
                 raise IOError(
                     "SQL error encountered when retrieving event types") from e
 
@@ -814,7 +782,7 @@ class SpiderFootDb:
                 self.dbh.executemany(qry, inserts)
                 self.conn.commit()
                 return True
-            except (sqlite3.Error, psycopg2.Error if psycopg2 else Exception) as e:
+            except (sqlite3.Error, psycopg2.Error) as e:
                 # More specific error handling with logging
                 error_msg = str(e).lower()
                 if "locked" in error_msg or "thread" in error_msg:
@@ -870,9 +838,14 @@ class SpiderFootDb:
         if not component:
             component = "SpiderFoot"
 
-        qry = f"INSERT INTO tbl_scan_log \
-            (scan_instance_id, generated, component, type, message) \
-            VALUES ({self._placeholder(5)})"
+        if self.db_type == 'postgresql':
+            qry = "INSERT INTO tbl_scan_log \
+                (scan_instance_id, generated, component, type, message) \
+                VALUES (%s, %s, %s, %s, %s)"
+        else:
+            qry = "INSERT INTO tbl_scan_log \
+                (scan_instance_id, generated, component, type, message) \
+                VALUES (?, ?, ?, ?, ?)"
 
         with self.dbhLock:
             try:
@@ -884,7 +857,7 @@ class SpiderFootDb:
                     instanceId, time.time() * 1000, component, classification, message
                 ))
                 self.conn.commit()
-            except (sqlite3.Error, psycopg2.Error if psycopg2 else Exception) as e:
+            except (sqlite3.Error, psycopg2.Error) as e:
                 error_msg = str(e).lower()
                 if "locked" in error_msg or "thread" in error_msg:
                     print(f"[WARNING] Database locked during single log insert: {e}")
@@ -924,14 +897,14 @@ class SpiderFootDb:
             raise TypeError(
                 f"scanTarget is {type(scanTarget)}; expected str()") from None
 
-        if self.db_type == 'sqlite':
-            qry = "INSERT INTO tbl_scan_instance \
-                (guid, name, seed_target, created, status) \
-                VALUES (?, ?, ?, ?, ?)"
-        else:  # postgresql
+        if self.db_type == 'postgresql':
             qry = "INSERT INTO tbl_scan_instance \
                 (guid, name, seed_target, created, status) \
                 VALUES (%s, %s, %s, %s, %s)"
+        else:
+            qry = "INSERT INTO tbl_scan_instance \
+                (guid, name, seed_target, created, status) \
+                VALUES (?, ?, ?, ?, ?)"
 
         with self.dbhLock:
             try:
@@ -939,7 +912,7 @@ class SpiderFootDb:
                     instanceId, scanName, scanTarget, time.time() * 1000, 'CREATED'
                 ))
                 self.conn.commit()
-            except (sqlite3.Error, psycopg2.Error if psycopg2 else Exception) as e:
+            except (sqlite3.Error, psycopg2.Error) as e:
                 raise IOError(
                     "Unable to create scan instance in database") from e
 
@@ -963,23 +936,23 @@ class SpiderFootDb:
                 f"instanceId is {type(instanceId)}; expected str()") from None
 
         qvars = list()
+        placeholder = '%s' if self.db_type == 'postgresql' else '?'
         qry = "UPDATE tbl_scan_instance SET "
-        ph = self._placeholder()
 
         if started is not None:
-            qry += f" started = {ph},"
+            qry += f" started = {placeholder},"
             qvars.append(started)
 
         if ended is not None:
-            qry += f" ended = {ph},"
+            qry += f" ended = {placeholder},"
             qvars.append(ended)
 
         if status is not None:
-            qry += f" status = {ph},"
+            qry += f" status = {placeholder},"
             qvars.append(status)
 
         # guid = guid is a little hack to avoid messing with , placement above
-        qry += f" guid = guid WHERE guid = {ph}"
+        qry += f" guid = guid WHERE guid = {placeholder}"
         qvars.append(instanceId)
 
         with self.dbhLock:
@@ -1009,17 +982,17 @@ class SpiderFootDb:
             raise TypeError(
                 f"instanceId is {type(instanceId)}; expected str()") from None
 
-        ph = self._placeholder()
+        placeholder = '%s' if self.db_type == 'postgresql' else '?'
         qry = f"SELECT name, seed_target, ROUND(created/1000) AS created, \
             ROUND(started/1000) AS started, ROUND(ended/1000) AS ended, status \
-            FROM tbl_scan_instance WHERE guid = {ph}"
+            FROM tbl_scan_instance WHERE guid = {placeholder}"
         qvars = [instanceId]
 
         with self.dbhLock:
             try:
                 self.dbh.execute(qry, qvars)
                 return self.dbh.fetchone()
-            except (sqlite3.Error, psycopg2.Error if psycopg2 else Exception) as e:
+            except (sqlite3.Error, psycopg2.Error) as e:
                 raise IOError(
                     "SQL error encountered when retrieving scan instance") from e
 
@@ -1050,25 +1023,25 @@ class SpiderFootDb:
         if by not in ["type", "module", "entity"]:
             raise ValueError(f"Invalid filter by value: {by}") from None
 
-        ph = self._placeholder()
+        placeholder = '%s' if self.db_type == 'postgresql' else '?'
 
         if by == "type":
             qry = f"SELECT r.type, e.event_descr, MAX(ROUND(generated)) AS last_in, \
                 count(*) AS total, count(DISTINCT r.data) as utotal FROM \
                 tbl_scan_results r, tbl_event_types e WHERE e.event = r.type \
-                AND r.scan_instance_id = {ph} GROUP BY r.type, e.event_descr ORDER BY e.event_descr"
+                AND r.scan_instance_id = {placeholder} GROUP BY r.type ORDER BY e.event_descr"
 
         if by == "module":
             qry = f"SELECT r.module, '', MAX(ROUND(generated)) AS last_in, \
                 count(*) AS total, count(DISTINCT r.data) as utotal FROM \
                 tbl_scan_results r, tbl_event_types e WHERE e.event = r.type \
-                AND r.scan_instance_id = {ph} GROUP BY r.module ORDER BY r.module DESC"
+                AND r.scan_instance_id = {placeholder} GROUP BY r.module ORDER BY r.module DESC"
 
         if by == "entity":
             qry = f"SELECT r.data, e.event_descr, MAX(ROUND(generated)) AS last_in, \
                 count(*) AS total, count(DISTINCT r.data) as utotal FROM \
                 tbl_scan_results r, tbl_event_types e WHERE e.event = r.type \
-                AND r.scan_instance_id = {ph} \
+                AND r.scan_instance_id = {placeholder} \
                 AND e.event_type in ('ENTITY') \
                 GROUP BY r.data, e.event_descr ORDER BY total DESC limit 50"
 
@@ -1078,7 +1051,7 @@ class SpiderFootDb:
             try:
                 self.dbh.execute(qry, qvars)
                 return self.dbh.fetchall()
-            except (sqlite3.Error, psycopg2.Error if psycopg2 else Exception) as e:
+            except (sqlite3.Error, psycopg2.Error) as e:
                 raise IOError(
                     "SQL error encountered when fetching result summary") from e
 
@@ -1108,18 +1081,18 @@ class SpiderFootDb:
         if by not in ["rule", "risk"]:
             raise ValueError(f"Invalid filter by value: {by}") from None
 
-        ph = self._placeholder()
+        placeholder = '%s' if self.db_type == 'postgresql' else '?'
 
         if by == "risk":
             qry = f"SELECT rule_risk, count(*) AS total FROM \
                 tbl_scan_correlation_results \
-                WHERE scan_instance_id = {ph} GROUP BY rule_risk ORDER BY rule_risk"
+                WHERE scan_instance_id = {placeholder} GROUP BY rule_risk ORDER BY rule_id"
 
         if by == "rule":
             qry = f"SELECT rule_id, rule_name, rule_risk, rule_descr, \
                 count(*) AS total FROM \
                 tbl_scan_correlation_results \
-                WHERE scan_instance_id = {ph} GROUP BY rule_id, rule_name, rule_risk, rule_descr ORDER BY rule_id"
+                WHERE scan_instance_id = {placeholder} GROUP BY rule_id ORDER BY rule_id"
 
         qvars = [instanceId]
 
@@ -1127,7 +1100,7 @@ class SpiderFootDb:
             try:
                 self.dbh.execute(qry, qvars)
                 return self.dbh.fetchall()
-            except (sqlite3.Error, psycopg2.Error if psycopg2 else Exception) as e:
+            except (sqlite3.Error, psycopg2.Error) as e:
                 raise IOError(
                     "SQL error encountered when fetching correlation summary") from e
 
@@ -1149,13 +1122,12 @@ class SpiderFootDb:
             raise TypeError(
                 f"instanceId is {type(instanceId)}; expected str()") from None
 
-        ph = self._placeholder()
+        placeholder = '%s' if self.db_type == 'postgresql' else '?'
         qry = f"SELECT c.id, c.title, c.rule_id, c.rule_risk, c.rule_name, \
             c.rule_descr, c.rule_logic, count(e.event_hash) AS event_count FROM \
             tbl_scan_correlation_results c, tbl_scan_correlation_results_events e \
-            WHERE c.scan_instance_id = {ph} AND c.id = e.correlation_id \
-            GROUP BY c.id, c.title, c.rule_id, c.rule_risk, c.rule_name, c.rule_descr, c.rule_logic \
-            ORDER BY c.title, c.rule_risk"
+            WHERE scan_instance_id = {placeholder} AND c.id = e.correlation_id \
+            GROUP BY c.id ORDER BY c.title, c.rule_risk"
 
         qvars = [instanceId]
 
@@ -1163,7 +1135,7 @@ class SpiderFootDb:
             try:
                 self.dbh.execute(qry, qvars)
                 return self.dbh.fetchall()
-            except (sqlite3.Error, psycopg2.Error if psycopg2 else Exception) as e:
+            except (sqlite3.Error, psycopg2.Error) as e:
                 raise IOError(
                     "SQL error encountered when fetching correlation list") from e
 
@@ -1204,32 +1176,34 @@ class SpiderFootDb:
             raise TypeError(
                 f"eventType is {type(eventType)}; expected str() or list()") from None
 
+        placeholder = '%s' if self.db_type == 'postgresql' else '?'
+
         qry = "SELECT ROUND(c.generated) AS generated, c.data, \
-            s.data as source_data, \
+            s.data as 'source_data', \
             c.module, c.type, c.confidence, c.visibility, c.risk, c.hash, \
             c.source_event_hash, t.event_descr, t.event_type, s.scan_instance_id, \
-            c.false_positive as fp, s.false_positive as parent_fp \
+            c.false_positive as 'fp', s.false_positive as 'parent_fp' \
             FROM tbl_scan_results c, tbl_scan_results s, tbl_event_types t "
 
         if correlationId:
             qry += ", tbl_scan_correlation_results_events ce "
 
-        ph = self._placeholder()
-        qry += f"WHERE c.scan_instance_id = {ph} AND c.source_event_hash = s.hash AND \
+        qry += f"WHERE c.scan_instance_id = {placeholder} AND c.source_event_hash = s.hash AND \
             s.scan_instance_id = c.scan_instance_id AND t.event = c.type"
 
         qvars = [instanceId]
 
         if correlationId:
-            qry += f" AND ce.event_hash = c.hash AND ce.correlation_id = {ph}"
+            qry += f" AND ce.event_hash = c.hash AND ce.correlation_id = {placeholder}"
             qvars.append(correlationId)
 
         if eventType != "ALL":
             if isinstance(eventType, list):
-                qry += " AND c.type in (" + self._placeholder(len(eventType)) + ")"
+                qry += " AND c.type in (" + \
+                    ','.join([placeholder] * len(eventType)) + ")"
                 qvars.extend(eventType)
             else:
-                qry += f" AND c.type = {ph}"
+                qry += f" AND c.type = {placeholder}"
                 qvars.append(eventType)
 
         if filterFp:
@@ -1237,26 +1211,28 @@ class SpiderFootDb:
 
         if srcModule:
             if isinstance(srcModule, list):
-                qry += " AND c.module in (" + self._placeholder(len(srcModule)) + ")"
+                qry += " AND c.module in (" + \
+                    ','.join([placeholder] * len(srcModule)) + ")"
                 qvars.extend(srcModule)
             else:
-                qry += f" AND c.module = {ph}"
+                qry += f" AND c.module = {placeholder}"
                 qvars.append(srcModule)
 
         if data:
             if isinstance(data, list):
-                qry += " AND c.data in (" + self._placeholder(len(data)) + ")"
+                qry += " AND c.data in (" + ','.join([placeholder] * len(data)) + ")"
                 qvars.extend(data)
             else:
-                qry += f" AND c.data = {ph}"
+                qry += f" AND c.data = {placeholder}"
                 qvars.append(data)
 
         if sourceId:
             if isinstance(sourceId, list):
-                qry += " AND c.source_event_hash in (" + self._placeholder(len(sourceId)) + ")"
+                qry += " AND c.source_event_hash in (" + \
+                    ','.join([placeholder] * len(sourceId)) + ")"
                 qvars.extend(sourceId)
             else:
-                qry += f" AND c.source_event_hash = {ph}"
+                qry += f" AND c.source_event_hash = {placeholder}"
                 qvars.append(sourceId)
 
         qry += " ORDER BY c.data"
@@ -1265,7 +1241,7 @@ class SpiderFootDb:
             try:
                 self.dbh.execute(qry, qvars)
                 return self.dbh.fetchall()
-            except (sqlite3.Error, psycopg2.Error if psycopg2 else Exception) as e:
+            except (sqlite3.Error, psycopg2.Error) as e:
                 raise IOError(
                     "SQL error encountered when fetching result events") from e
 
@@ -1293,13 +1269,13 @@ class SpiderFootDb:
             raise TypeError(
                 f"eventType is {type(eventType)}; expected str()") from None
 
-        ph = self._placeholder()
+        placeholder = '%s' if self.db_type == 'postgresql' else '?'
         qry = f"SELECT DISTINCT data, type, COUNT(*) FROM tbl_scan_results \
-            WHERE scan_instance_id = {ph}"
+            WHERE scan_instance_id = {placeholder}"
         qvars = [instanceId]
 
         if eventType != "ALL":
-            qry += f" AND type = {ph}"
+            qry += f" AND type = {placeholder}"
             qvars.append(eventType)
 
         if filterFp:
@@ -1311,7 +1287,7 @@ class SpiderFootDb:
             try:
                 self.dbh.execute(qry, qvars)
                 return self.dbh.fetchall()
-            except (sqlite3.Error, psycopg2.Error if psycopg2 else Exception) as e:
+            except (sqlite3.Error, psycopg2.Error) as e:
                 raise IOError(
                     "SQL error encountered when fetching unique result events") from e
 
@@ -1336,15 +1312,18 @@ class SpiderFootDb:
             raise TypeError(
                 f"instanceId is {type(instanceId)}; expected str()") from None
 
-        ph = self._placeholder()
-        if self.db_type == 'sqlite':
-            qry = f"SELECT generated AS generated, component, \
-                type, message, rowid FROM tbl_scan_log WHERE scan_instance_id = {ph}"
-        else:  # postgresql - use hash of ctid as rowid equivalent
-            qry = f"SELECT generated AS generated, component, \
-                type, message, (CAST(('x'||lpad(split_part(replace(replace(ctid::text,'(',''),')',''),',' ,1),'8','0'))AS bit(32))::int)*1000000 + (CAST(('x'||lpad(split_part(replace(replace(ctid::text,'(',''),')',''),',',2),'8','0'))AS bit(32))::int) as rowid FROM tbl_scan_log WHERE scan_instance_id = {ph}"
-        if fromRowId:
-            qry += f" and rowid > {ph}"
+        # PostgreSQL doesn't have rowid, use generated timestamp as unique identifier
+        # PostgreSQL also uses %s placeholders instead of ?
+        if self.db_type == 'postgresql':
+            qry = "SELECT generated AS generated, component, \
+                type, message, generated as rowid FROM tbl_scan_log WHERE scan_instance_id = %s"
+            if fromRowId:
+                qry += " AND generated > %s"
+        else:
+            qry = "SELECT generated AS generated, component, \
+                type, message, rowid FROM tbl_scan_log WHERE scan_instance_id = ?"
+            if fromRowId:
+                qry += " AND rowid > ?"
 
         qry += " ORDER BY generated "
         if reverse:
@@ -1357,14 +1336,17 @@ class SpiderFootDb:
             qvars.append(str(fromRowId))
 
         if limit is not None:
-            qry += f" LIMIT {ph}"
+            if self.db_type == 'postgresql':
+                qry += " LIMIT %s"
+            else:
+                qry += " LIMIT ?"
             qvars.append(str(limit))
 
         with self.dbhLock:
             try:
                 self.dbh.execute(qry, qvars)
                 return self.dbh.fetchall()
-            except (sqlite3.Error, psycopg2.Error if psycopg2 else Exception) as e:
+            except (sqlite3.Error, psycopg2.Error) as e:
                 raise IOError(
                     "SQL error encountered when fetching scan logs") from e
 
@@ -1391,21 +1373,21 @@ class SpiderFootDb:
             raise TypeError(
                 f"limit is {type(limit)}; expected int()") from None
 
-        ph = self._placeholder()
+        placeholder = '%s' if self.db_type == 'postgresql' else '?'
         qry = f"SELECT generated AS generated, component, \
-            message FROM tbl_scan_log WHERE scan_instance_id = {ph} \
+            message FROM tbl_scan_log WHERE scan_instance_id = {placeholder} \
             AND type = 'ERROR' ORDER BY generated DESC"
         qvars = [instanceId]
 
         if limit:
-            qry += f" LIMIT {ph}"
+            qry += f" LIMIT {placeholder}"
             qvars.append(str(limit))
 
         with self.dbhLock:
             try:
                 self.dbh.execute(qry, qvars)
                 return self.dbh.fetchall()
-            except (sqlite3.Error, psycopg2.Error if psycopg2 else Exception) as e:
+            except (sqlite3.Error, psycopg2.Error) as e:
                 raise IOError(
                     "SQL error encountered when fetching scan errors") from e
 
@@ -1427,16 +1409,11 @@ class SpiderFootDb:
             raise TypeError(
                 f"instanceId is {type(instanceId)}; expected str()") from None
 
-        ph = self._placeholder()
-        # Delete child records first, then parent
-        # Correlation events must be deleted before correlation results
-        qry1 = f"DELETE FROM tbl_scan_correlation_results_events WHERE correlation_id IN (SELECT id FROM tbl_scan_correlation_results WHERE scan_instance_id = {ph})"
-        qry2 = f"DELETE FROM tbl_scan_correlation_results WHERE scan_instance_id = {ph}"
-        qry3 = f"DELETE FROM tbl_scan_log WHERE scan_instance_id = {ph}"
-        qry4 = f"DELETE FROM tbl_scan_config WHERE scan_instance_id = {ph}"
-        qry5 = f"DELETE FROM tbl_scan_results WHERE scan_instance_id = {ph}"
-        # Delete parent last
-        qry6 = f"DELETE FROM tbl_scan_instance WHERE guid = {ph}"
+        placeholder = '%s' if self.db_type == 'postgresql' else '?'
+        qry1 = f"DELETE FROM tbl_scan_instance WHERE guid = {placeholder}"
+        qry2 = f"DELETE FROM tbl_scan_config WHERE scan_instance_id = {placeholder}"
+        qry3 = f"DELETE FROM tbl_scan_results WHERE scan_instance_id = {placeholder}"
+        qry4 = f"DELETE FROM tbl_scan_log WHERE scan_instance_id = {placeholder}"
         qvars = [instanceId]
 
         with self.dbhLock:
@@ -1445,10 +1422,8 @@ class SpiderFootDb:
                 self.dbh.execute(qry2, qvars)
                 self.dbh.execute(qry3, qvars)
                 self.dbh.execute(qry4, qvars)
-                self.dbh.execute(qry5, qvars)
-                self.dbh.execute(qry6, qvars)
                 self.conn.commit()
-            except (sqlite3.Error, psycopg2.Error if psycopg2 else Exception) as e:
+            except (sqlite3.Error, psycopg2.Error) as e:
                 raise IOError(
                     "SQL error encountered when deleting scan") from e
 
@@ -1478,21 +1453,22 @@ class SpiderFootDb:
             raise TypeError(
                 f"resultHashes is {type(resultHashes)}; expected list()") from None
 
-        ph = self._placeholder()
+        placeholder = '%s' if self.db_type == 'postgresql' else '?'
+
         with self.dbhLock:
             for resultHash in resultHashes:
-                qry = f"UPDATE tbl_scan_results SET false_positive = {ph} WHERE \
-                    scan_instance_id = {ph} AND hash = {ph}"
+                qry = f"UPDATE tbl_scan_results SET false_positive = {placeholder} WHERE \
+                    scan_instance_id = {placeholder} AND hash = {placeholder}"
                 qvars = [fpFlag, instanceId, resultHash]
                 try:
                     self.dbh.execute(qry, qvars)
-                except (sqlite3.Error, psycopg2.Error if psycopg2 else Exception) as e:
+                except (sqlite3.Error, psycopg2.Error) as e:
                     raise IOError(
                         "SQL error encountered when updating false-positive") from e
 
             try:
                 self.conn.commit()
-            except (sqlite3.Error, psycopg2.Error if psycopg2 else Exception) as e:
+            except (sqlite3.Error, psycopg2.Error) as e:
                 raise IOError(
                     "SQL error encountered when updating false-positive") from e
 
@@ -1519,13 +1495,8 @@ class SpiderFootDb:
         if not optMap:
             raise ValueError("optMap is empty") from None
 
-        if self.db_type == 'sqlite':
-            qry = "REPLACE INTO tbl_config (scope, opt, val) VALUES (?, ?, ?)"
-        else:  # postgresql
-            qry = """
-                INSERT INTO tbl_config (scope, opt, val) VALUES (%s, %s, %s)
-                ON CONFLICT (scope, opt) DO UPDATE SET val = EXCLUDED.val
-            """
+        placeholder = '%s' if self.db_type == 'postgresql' else '?'
+        qry = f"REPLACE INTO tbl_config (scope, opt, val) VALUES ({placeholder}, {placeholder}, {placeholder})"
 
         with self.dbhLock:
             for opt in list(optMap.keys()):
@@ -1539,13 +1510,13 @@ class SpiderFootDb:
 
                 try:
                     self.dbh.execute(qry, qvals)
-                except (sqlite3.Error, psycopg2.Error if psycopg2 else Exception) as e:
+                except (sqlite3.Error, psycopg2.Error) as e:
                     raise IOError(
                         "SQL error encountered when storing config, aborting") from e
 
             try:
                 self.conn.commit()
-            except (sqlite3.Error, psycopg2.Error if psycopg2 else Exception) as e:
+            except (sqlite3.Error, psycopg2.Error) as e:
                 raise IOError(
                     "SQL error encountered when storing config, aborting") from e
 
@@ -1575,7 +1546,7 @@ class SpiderFootDb:
                         retval[f"{scope}:{opt}"] = val
 
                 return retval
-            except (sqlite3.Error, psycopg2.Error if psycopg2 else Exception) as e:
+            except (sqlite3.Error, psycopg2.Error) as e:
                 raise IOError(
                     "SQL error encountered when fetching configuration") from e
 
@@ -1593,7 +1564,7 @@ class SpiderFootDb:
             try:
                 self.dbh.execute(qry)
                 self.conn.commit()
-            except (sqlite3.Error, psycopg2.Error if psycopg2 else Exception) as e:
+            except (sqlite3.Error, psycopg2.Error) as e:
                 raise IOError(
                     "Unable to clear configuration from the database") from e
 
@@ -1616,15 +1587,9 @@ class SpiderFootDb:
         if not optMap:
             raise ValueError("optMap is empty") from None
 
-        if self.db_type == 'sqlite':
-            qry = "REPLACE INTO tbl_scan_config \
-                    (scan_instance_id, component, opt, val) VALUES (?, ?, ?, ?)"
-        else:  # postgresql
-            qry = """
-                INSERT INTO tbl_scan_config (scan_instance_id, component, opt, val)
-                VALUES (%s, %s, %s, %s)
-                ON CONFLICT (scan_instance_id, component, opt) DO UPDATE SET val = EXCLUDED.val
-            """
+        placeholder = '%s' if self.db_type == 'postgresql' else '?'
+        qry = f"REPLACE INTO tbl_scan_config \
+                (scan_instance_id, component, opt, val) VALUES ({placeholder}, {placeholder}, {placeholder}, {placeholder})"
 
         with self.dbhLock:
             for opt in list(optMap.keys()):
@@ -1638,13 +1603,13 @@ class SpiderFootDb:
 
                 try:
                     self.dbh.execute(qry, qvals)
-                except (sqlite3.Error, psycopg2.Error if psycopg2 else Exception) as e:
+                except (sqlite3.Error, psycopg2.Error) as e:
                     raise IOError(
                         "SQL error encountered when storing config, aborting") from e
 
             try:
                 self.conn.commit()
-            except (sqlite3.Error, psycopg2.Error if psycopg2 else Exception) as e:
+            except (sqlite3.Error, psycopg2.Error) as e:
                 raise IOError(
                     "SQL error encountered when storing config, aborting") from e
 
@@ -1666,9 +1631,9 @@ class SpiderFootDb:
             raise TypeError(
                 f"instanceId is {type(instanceId)}; expected str()") from None
 
-        ph = self._placeholder()
+        placeholder = '%s' if self.db_type == 'postgresql' else '?'
         qry = f"SELECT component, opt, val FROM tbl_scan_config \
-                WHERE scan_instance_id = {ph} ORDER BY component, opt"
+                WHERE scan_instance_id = {placeholder} ORDER BY component, opt"
         qvars = [instanceId]
 
         retval = dict()
@@ -1682,7 +1647,7 @@ class SpiderFootDb:
                     else:
                         retval[f"{component}:{opt}"] = val
                 return retval
-            except (sqlite3.Error, psycopg2.Error if psycopg2 else Exception) as e:
+            except (sqlite3.Error, psycopg2.Error) as e:
                 raise IOError(
                     "SQL error encountered when fetching configuration") from e
 
@@ -1782,10 +1747,16 @@ class SpiderFootDb:
             storeData = storeData[0:truncateSize]
 
         # retrieve scan results
-        qry = f"INSERT INTO tbl_scan_results \
-            (scan_instance_id, hash, type, generated, confidence, \
-            visibility, risk, module, data, source_event_hash) \
-            VALUES ({self._placeholder(10)})"
+        if self.db_type == 'postgresql':
+            qry = "INSERT INTO tbl_scan_results \
+                (scan_instance_id, hash, type, generated, confidence, \
+                visibility, risk, module, data, source_event_hash) \
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)"
+        else:
+            qry = "INSERT INTO tbl_scan_results \
+                (scan_instance_id, hash, type, generated, confidence, \
+                visibility, risk, module, data, source_event_hash) \
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
 
         qvals = [instanceId, sfEvent.hash, sfEvent.eventType, sfEvent.generated,
                  sfEvent.confidence, sfEvent.visibility, sfEvent.risk,
@@ -1795,7 +1766,7 @@ class SpiderFootDb:
             try:
                 self.dbh.execute(qry, qvals)
                 self.conn.commit()
-            except (sqlite3.Error, psycopg2.Error if psycopg2 else Exception) as e:
+            except (sqlite3.Error, psycopg2.Error) as e:
                 raise IOError(
                     f"SQL error encountered when storing event data ({self.dbh})") from e
 
@@ -1815,12 +1786,11 @@ class SpiderFootDb:
         qry = "SELECT i.guid, i.name, i.seed_target, ROUND(i.created/1000), \
             ROUND(i.started)/1000 as started, ROUND(i.ended)/1000, i.status, COUNT(r.type) \
             FROM tbl_scan_instance i, tbl_scan_results r WHERE i.guid = r.scan_instance_id \
-            AND r.type <> 'ROOT' \
-            GROUP BY i.guid, i.name, i.seed_target, i.created, i.started, i.ended, i.status \
+            AND r.type <> 'ROOT' GROUP BY i.guid \
             UNION ALL \
             SELECT i.guid, i.name, i.seed_target, ROUND(i.created/1000), \
-            ROUND(i.started)/1000 as started, ROUND(i.ended)/1000, i.status, 0 \
-            FROM tbl_scan_instance i WHERE i.guid NOT IN ( \
+            ROUND(i.started)/1000 as started, ROUND(i.ended)/1000, i.status, '0' \
+            FROM tbl_scan_instance i  WHERE i.guid NOT IN ( \
             SELECT distinct scan_instance_id FROM tbl_scan_results WHERE type <> 'ROOT') \
             ORDER BY started DESC"
 
@@ -1828,7 +1798,7 @@ class SpiderFootDb:
             try:
                 self.dbh.execute(qry)
                 return self.dbh.fetchall()
-            except (sqlite3.Error, psycopg2.Error if psycopg2 else Exception) as e:
+            except (sqlite3.Error, psycopg2.Error) as e:
                 raise IOError(
                     "SQL error encountered when fetching scan list") from e
 
@@ -1850,17 +1820,17 @@ class SpiderFootDb:
             raise TypeError(
                 f"instanceId is {type(instanceId)}; expected str()") from None
 
-        ph = self._placeholder()
-        qry = f"SELECT TO_CHAR(TO_TIMESTAMP(generated/1000), 'HH24:MI D') AS hourmin, \
+        placeholder = '%s' if self.db_type == 'postgresql' else '?'
+        qry = f"SELECT STRFTIME('%H:%M %w', generated, 'unixepoch') AS hourmin, \
                 type, COUNT(*) FROM tbl_scan_results \
-                WHERE scan_instance_id = {ph} GROUP BY TO_CHAR(TO_TIMESTAMP(generated/1000), 'HH24:MI D'), type"
+                WHERE scan_instance_id = {placeholder} GROUP BY hourmin, type"
         qvars = [instanceId]
 
         with self.dbhLock:
             try:
                 self.dbh.execute(qry, qvars)
                 return self.dbh.fetchall()
-            except (sqlite3.Error, psycopg2.Error if psycopg2 else Exception) as e:
+            except (sqlite3.Error, psycopg2.Error) as e:
                 raise IOError(
                     f"SQL error encountered when fetching history for scan {instanceId}") from e
 
@@ -1895,28 +1865,28 @@ class SpiderFootDb:
                 continue
             hashIds.append(hashId)
 
+        placeholder = '%s' if self.db_type == 'postgresql' else '?'
+
         # the output of this needs to be aligned with scanResultEvent,
         # as other functions call both expecting the same output.
-        ph = self._placeholder()
-        placeholders = ', '.join([ph] * len(hashIds))
         qry = f"SELECT ROUND(c.generated) AS generated, c.data, \
-            s.data as source_data, \
+            s.data as 'source_data', \
             c.module, c.type, c.confidence, c.visibility, c.risk, c.hash, \
             c.source_event_hash, t.event_descr, t.event_type, s.scan_instance_id, \
-            c.false_positive as fp, s.false_positive as parent_fp, \
-            s.type, s.module, st.event_type as source_entity_type \
+            c.false_positive as 'fp', s.false_positive as 'parent_fp', \
+            s.type, s.module, st.event_type as 'source_entity_type' \
             FROM tbl_scan_results c, tbl_scan_results s, tbl_event_types t, \
             tbl_event_types st \
-            WHERE c.scan_instance_id = {ph} AND c.source_event_hash = s.hash AND \
+            WHERE c.scan_instance_id = {placeholder} AND c.source_event_hash = s.hash AND \
             s.scan_instance_id = c.scan_instance_id AND st.event = s.type AND \
-            t.event = c.type AND c.hash IN ({placeholders})"
-        qvars = [instanceId] + hashIds
+            t.event = c.type AND c.hash in ('%s')" % "','".join(hashIds)
+        qvars = [instanceId]
 
         with self.dbhLock:
             try:
                 self.dbh.execute(qry, qvars)
                 return self.dbh.fetchall()
-            except (sqlite3.Error, psycopg2.Error if psycopg2 else Exception) as e:
+            except (sqlite3.Error, psycopg2.Error) as e:
                 raise IOError(
                     "SQL error encountered when getting source element IDs") from e
 
@@ -1951,26 +1921,26 @@ class SpiderFootDb:
                 continue
             hashIds.append(hashId)
 
+        placeholder = '%s' if self.db_type == 'postgresql' else '?'
+
         # the output of this needs to be aligned with scanResultEvent,
         # as other functions call both expecting the same output.
-        ph = self._placeholder()
-        placeholders = ', '.join([ph] * len(hashIds))
         qry = f"SELECT ROUND(c.generated) AS generated, c.data, \
-            s.data as source_data, \
+            s.data as 'source_data', \
             c.module, c.type, c.confidence, c.visibility, c.risk, c.hash, \
             c.source_event_hash, t.event_descr, t.event_type, s.scan_instance_id, \
-            c.false_positive as fp, s.false_positive as parent_fp \
+            c.false_positive as 'fp', s.false_positive as 'parent_fp' \
             FROM tbl_scan_results c, tbl_scan_results s, tbl_event_types t \
-            WHERE c.scan_instance_id = {ph} AND c.source_event_hash = s.hash AND \
+            WHERE c.scan_instance_id = {placeholder} AND c.source_event_hash = s.hash AND \
             s.scan_instance_id = c.scan_instance_id AND \
-            t.event = c.type AND s.hash IN ({placeholders})"
-        qvars = [instanceId] + hashIds
+            t.event = c.type AND s.hash in ('%s')" % "','".join(hashIds)
+        qvars = [instanceId]
 
         with self.dbhLock:
             try:
                 self.dbh.execute(qry, qvars)
                 return self.dbh.fetchall()
-            except (sqlite3.Error, psycopg2.Error if psycopg2 else Exception) as e:
+            except (sqlite3.Error, psycopg2.Error) as e:
                 raise IOError(
                     "SQL error encountered when getting child element IDs") from e
 
@@ -2127,7 +2097,8 @@ class SpiderFootDb:
         import uuid
         correlation_id = str(uuid.uuid4())
 
-        ph = self._placeholder()
+        placeholder = '%s' if self.db_type == 'postgresql' else '?'
+
         with self.dbhLock:
             try:
                 # Ensure connection is alive
@@ -2137,7 +2108,7 @@ class SpiderFootDb:
                 qry = f"INSERT INTO tbl_scan_correlation_results \
                     (id, scan_instance_id, title, rule_id, rule_risk, rule_name, \
                     rule_descr, rule_logic) \
-                    VALUES ({self._placeholder(8)})"
+                    VALUES ({placeholder}, {placeholder}, {placeholder}, {placeholder}, {placeholder}, {placeholder}, {placeholder}, {placeholder})"
                 qvars = [correlation_id, instanceId, correlationTitle, ruleId, ruleRisk, ruleName, ruleDescr, ruleYaml]
 
                 self.dbh.execute(qry, qvars)
@@ -2151,19 +2122,19 @@ class SpiderFootDb:
                 # Insert event hashes for this correlation
                 event_insert_count = 0
                 for eventHash in eventHashes:
-                    qry = f"INSERT INTO tbl_scan_correlation_results_events (correlation_id, event_hash) VALUES ({ph}, {ph})"
+                    qry = f"INSERT INTO tbl_scan_correlation_results_events (correlation_id, event_hash) VALUES ({placeholder}, {placeholder})"
                     qvars = [correlationId, eventHash]
                     try:
                         self.dbh.execute(qry, qvars)
                         event_insert_count += 1
-                    except (sqlite3.Error, psycopg2.Error if psycopg2 else Exception) as e:
+                    except (sqlite3.Error, psycopg2.Error) as e:
                         print(f"[WARNING] Failed to insert correlation event {eventHash}: {e}")
                         continue  # Continue with other events instead of failing completely
 
                 self.conn.commit()
                 print(f"[INFO] Created correlation {correlationId} with {event_insert_count}/{len(eventHashes)} events")
                 
-            except (sqlite3.Error, psycopg2.Error if psycopg2 else Exception) as e:
+            except (sqlite3.Error, psycopg2.Error) as e:
                 print(f"[ERROR] SQL error creating correlation result: {e}")
                 try:
                     self.conn.rollback()
@@ -2190,14 +2161,14 @@ class SpiderFootDb:
         Returns:
             list: List of dicts with source event details (hash, type, data, module, etc.)
         """
-        ph = self._placeholder()
+        placeholder = '%s' if self.db_type == 'postgresql' else '?'
         qry = f"""
             SELECT s.hash, s.type, s.data, s.module, s.generated, s.source_event_hash
             FROM tbl_scan_results c
             JOIN tbl_scan_results s
               ON c.source_event_hash = s.hash
-            WHERE c.scan_instance_id = {ph}
-              AND c.hash = {ph}
+            WHERE c.scan_instance_id = {placeholder}
+              AND c.hash = {placeholder}
               AND c.source_event_hash != 'ROOT'
         """
         qvars = [scan_id, event_hash]
@@ -2216,7 +2187,7 @@ class SpiderFootDb:
                         'source_event_hash': row[5]
                     })
                 return sources
-            except (sqlite3.Error, psycopg2.Error if psycopg2 else Exception) as e:
+            except (sqlite3.Error, psycopg2.Error) as e:
                 raise IOError("SQL error encountered when fetching event sources") from e
 
     def get_entities(self, scan_id: str, event_hash: str) -> list:
@@ -2229,12 +2200,12 @@ class SpiderFootDb:
         Returns:
             list: List of dicts with entity event details (hash, type, data, module, etc.)
         """
-        ph = self._placeholder()
+        placeholder = '%s' if self.db_type == 'postgresql' else '?'
         qry = f"""
             SELECT c.hash, c.type, c.data, c.module, c.generated, c.source_event_hash
             FROM tbl_scan_results c
-            WHERE c.scan_instance_id = {ph}
-              AND c.source_event_hash = {ph}
+            WHERE c.scan_instance_id = {placeholder}
+              AND c.source_event_hash = {placeholder}
               AND c.type IN (
                 SELECT event FROM tbl_event_types WHERE event_type = 'ENTITY'
               )
@@ -2255,5 +2226,5 @@ class SpiderFootDb:
                         'source_event_hash': row[5]
                     })
                 return entities
-            except (sqlite3.Error, psycopg2.Error if psycopg2 else Exception) as e:
+            except (sqlite3.Error, psycopg2.Error) as e:
                 raise IOError("SQL error encountered when fetching entity events") from e

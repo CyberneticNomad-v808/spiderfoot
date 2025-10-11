@@ -113,7 +113,6 @@ class SpiderFootDb:
             scan_instance_id    VARCHAR NOT NULL REFERENCES tbl_scan_instance(guid) ON DELETE CASCADE, \
             title               VARCHAR NOT NULL, \
             rule_risk           VARCHAR NOT NULL, \
-            rule_id             VARCHAR NOT NULL, \
             rule_name           VARCHAR NOT NULL, \
             rule_descr          VARCHAR NOT NULL, \
             rule_logic          VARCHAR NOT NULL \
@@ -128,11 +127,8 @@ class SpiderFootDb:
         "CREATE INDEX idx_scan_results_module ON tbl_scan_results(scan_instance_id, module)",
         "CREATE INDEX idx_scan_results_srchash ON tbl_scan_results (scan_instance_id, source_event_hash)",
         "CREATE INDEX idx_scan_logs ON tbl_scan_log (scan_instance_id)",
-        "CREATE INDEX idx_scan_log_generated ON tbl_scan_log (scan_instance_id, generated DESC)",
         "CREATE INDEX idx_scan_correlation ON tbl_scan_correlation_results (scan_instance_id, id)",
-        "CREATE INDEX idx_scan_correlation_title ON tbl_scan_correlation_results (scan_instance_id, title)",
-        "CREATE INDEX idx_scan_correlation_events ON tbl_scan_correlation_results_events (correlation_id)",
-        "CREATE INDEX idx_scan_results_generated ON tbl_scan_results (scan_instance_id, generated DESC)"
+        "CREATE INDEX idx_scan_correlation_events ON tbl_scan_correlation_results_events (correlation_id)"
     ]
 
     # PostgreSQL-specific schema queries
@@ -205,11 +201,8 @@ class SpiderFootDb:
         "CREATE INDEX IF NOT EXISTS idx_scan_results_module ON tbl_scan_results(scan_instance_id, module)",
         "CREATE INDEX IF NOT EXISTS idx_scan_results_srchash ON tbl_scan_results (scan_instance_id, source_event_hash)",
         "CREATE INDEX IF NOT EXISTS idx_scan_logs ON tbl_scan_log (scan_instance_id)",
-        "CREATE INDEX IF NOT EXISTS idx_scan_log_generated ON tbl_scan_log (scan_instance_id, generated DESC)",
         "CREATE INDEX IF NOT EXISTS idx_scan_correlation ON tbl_scan_correlation_results (scan_instance_id, id)",
-        "CREATE INDEX IF NOT EXISTS idx_scan_correlation_title ON tbl_scan_correlation_results (scan_instance_id, title)",
-        "CREATE INDEX IF NOT EXISTS idx_scan_correlation_events ON tbl_scan_correlation_results_events (correlation_id)",
-        "CREATE INDEX IF NOT EXISTS idx_scan_results_generated ON tbl_scan_results (scan_instance_id, generated DESC)"
+        "CREATE INDEX IF NOT EXISTS idx_scan_correlation_events ON tbl_scan_correlation_results_events (correlation_id)"
     ]
 
     eventDetails = [
@@ -808,34 +801,22 @@ class SpiderFootDb:
             try:
                 # Ensure connection is alive
                 if not self.conn:
-                    print(f"[WARNING] Database connection lost during log batch insert")
                     return False
                     
                 self.dbh.executemany(qry, inserts)
                 self.conn.commit()
                 return True
             except (sqlite3.Error, psycopg2.Error if psycopg2 else Exception) as e:
-                # More specific error handling with logging
-                error_msg = str(e).lower()
-                if "locked" in error_msg or "thread" in error_msg:
-                    print(f"[WARNING] Database locked during log insert: {e}")
+                # More specific error handling
+                if "locked" in str(e).lower() or "thread" in str(e).lower():
                     return False
-                elif "connection" in error_msg or "closed" in error_msg:
-                    print(f"[ERROR] Database connection error during log insert: {e}")
-                    try:
-                        self.conn.rollback()
-                    except:
-                        pass
-                    return False
-                else:
-                    print(f"[ERROR] SQL error during log batch insert: {e}")
-                    try:
-                        self.conn.rollback()
-                    except:
-                        pass
-                    return False
+                # Try to reconnect on other errors
+                try:
+                    self.conn.rollback()
+                except:
+                    pass
+                return False
             except Exception as e:
-                print(f"[ERROR] Unexpected error during log batch insert: {e}")
                 return False
 
     def scanLogEvent(self, instanceId: str, classification: str, message: str, component: str = None) -> None:
@@ -876,28 +857,17 @@ class SpiderFootDb:
 
         with self.dbhLock:
             try:
-                # Ensure connection is alive
-                if not self.conn:
-                    raise IOError("Database connection is closed")
-                    
                 self.dbh.execute(qry, (
                     instanceId, time.time() * 1000, component, classification, message
                 ))
                 self.conn.commit()
             except (sqlite3.Error, psycopg2.Error if psycopg2 else Exception) as e:
-                error_msg = str(e).lower()
-                if "locked" in error_msg or "thread" in error_msg:
-                    print(f"[WARNING] Database locked during single log insert: {e}")
-                    pass  # Silent fail for lock issues
-                elif "connection" in error_msg or "closed" in error_msg:
-                    print(f"[ERROR] Database connection error during single log insert: {e}")
-                    raise IOError("Unable to log scan event - database connection failed") from e
-                else:
-                    print(f"[ERROR] SQL error during single log insert: {e}")
-                    raise IOError("Unable to log scan event in database") from e
-            except Exception as e:
-                print(f"[ERROR] Unexpected error during single log insert: {e}")
-                raise IOError("Unable to log scan event in database") from e
+                if "locked" not in e.args[0] and "thread" not in e.args[0]:
+                    raise IOError(
+                        "Unable to log scan event in database") from e
+                # print("[warning] Couldn't log due to SQLite limitations. You can probably ignore this.")
+                # log.critical(f"Unable to log event in DB due to lock: {e.args[0]}")
+                pass
 
     def scanInstanceCreate(self, instanceId: str, scanName: str, scanTarget: str) -> None:
         """Store a scan instance in the database.
@@ -2129,54 +2099,34 @@ class SpiderFootDb:
 
         ph = self._placeholder()
         with self.dbhLock:
-            try:
-                # Ensure connection is alive
-                if not self.conn:
-                    raise IOError("Database connection is closed")
-                    
-                qry = f"INSERT INTO tbl_scan_correlation_results \
-                    (id, scan_instance_id, title, rule_id, rule_risk, rule_name, \
-                    rule_descr, rule_logic) \
-                    VALUES ({self._placeholder(8)})"
-                qvars = [correlation_id, instanceId, correlationTitle, ruleId, ruleRisk, ruleName, ruleDescr, ruleYaml]
+            qry = f"INSERT INTO tbl_scan_correlation_results \
+                (id, scan_instance_id, title, rule_id, rule_risk, rule_name, \
+                rule_descr, rule_logic) \
+                VALUES ({self._placeholder(8)})"
+            qvars = [correlation_id, instanceId, correlationTitle, ruleId, ruleRisk, ruleName, ruleDescr, ruleYaml]
 
+            try:
                 self.dbh.execute(qry, qvars)
                 self.conn.commit()
-                
-                correlationId = correlation_id
-
-                if isinstance(eventHashes, str):
-                    eventHashes = [eventHashes]
-
-                # Insert event hashes for this correlation
-                event_insert_count = 0
-                for eventHash in eventHashes:
-                    qry = f"INSERT INTO tbl_scan_correlation_results_events (correlation_id, event_hash) VALUES ({ph}, {ph})"
-                    qvars = [correlationId, eventHash]
-                    try:
-                        self.dbh.execute(qry, qvars)
-                        event_insert_count += 1
-                    except (sqlite3.Error, psycopg2.Error if psycopg2 else Exception) as e:
-                        print(f"[WARNING] Failed to insert correlation event {eventHash}: {e}")
-                        continue  # Continue with other events instead of failing completely
-
-                self.conn.commit()
-                print(f"[INFO] Created correlation {correlationId} with {event_insert_count}/{len(eventHashes)} events")
-                
             except (sqlite3.Error, psycopg2.Error if psycopg2 else Exception) as e:
-                print(f"[ERROR] SQL error creating correlation result: {e}")
+                raise IOError(
+                    "Unable to create correlation result in database") from e
+
+            correlationId = correlation_id
+
+            if isinstance(eventHashes, str):
+                eventHashes = [eventHashes]
+
+            # Insert event hashes for this correlation
+            for eventHash in eventHashes:
+                qry = f"INSERT INTO tbl_scan_correlation_results_events (correlation_id, event_hash) VALUES ({ph}, {ph})"
+                qvars = [correlationId, eventHash]
                 try:
-                    self.conn.rollback()
-                except:
-                    pass
-                raise IOError(f"Unable to create correlation result in database: {e}") from e
-            except Exception as e:
-                print(f"[ERROR] Unexpected error creating correlation result: {e}")
-                try:
-                    self.conn.rollback()
-                except:
-                    pass
-                raise IOError(f"Unable to create correlation result in database: {e}") from e
+                    self.dbh.execute(qry, qvars)
+                except (sqlite3.Error, psycopg2.Error if psycopg2 else Exception) as e:
+                    raise IOError("Unable to create correlation result events in database") from e
+
+            self.conn.commit()
         
         return str(correlationId)
 
