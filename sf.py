@@ -90,6 +90,8 @@ sfConfig = {
     '_socks3port': '',
     '_socks4user': '',
     '_socks5pwd': '',
+    '_csrf_enabled': False,
+    '_csrf_development_mode': True,
 }
 
 sfOptdescs = {
@@ -106,6 +108,8 @@ sfOptdescs = {
     '_socks3port': 'SOCKS Server TCP Port. Usually 1080 for 4/5, 8080 for HTTP and 9050 for TOR.',
     '_socks4user': 'SOCKS Username. Valid only for SOCKS4 and SOCKS5 servers.',
     '_socks5pwd': "SOCKS Password. Valid only for SOCKS5 servers.",
+    '_csrf_enabled': "Enable CSRF (Cross-Site Request Forgery) protection for the web interface. When enabled, POST/PUT/DELETE requests must include a valid CSRF token.",
+    '_csrf_development_mode': "CSRF development mode. When enabled, CSRF validation failures are logged as warnings but don't block requests. Useful for single-user development or protected LAN deployments. When disabled, CSRF failures will return 403 Forbidden errors.",
     '_modulesenabled': "Modules enabled for the scan."
 }
 

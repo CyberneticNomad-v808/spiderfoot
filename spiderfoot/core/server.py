@@ -18,6 +18,7 @@ import cherrypy_cors
 from cherrypy.lib import auth_digest
 
 from spiderfoot import SpiderFootHelpers
+from spiderfoot.security.csrf_middleware import enable_csrf_protection
 from sfwebui import SpiderFootWebUi
 
 
@@ -98,11 +99,21 @@ class ServerManager:
                 'cors.preflight.origins': cors_origins
             })
 
+            # Setup CSRF protection if enabled
+            if self.config.get('_csrf_enabled', False):
+                self.log.info("Enabling CSRF protection")
+                enable_csrf_protection(self.config)
+                csrf_status = "with CSRF protection enabled"
+                if self.config.get('_csrf_development_mode', True):
+                    csrf_status += " (development mode)"
+            else:
+                csrf_status = "without CSRF protection"
+
             print("")
             print("*************************************************************")
             print(" Use SpiderFoot by starting your web browser of choice and ")
             print(f" browse to {url}")
-            print(f" Server running {auth_info}")
+            print(f" Server running {auth_info}, {csrf_status}")
             print("*************************************************************")
             print("")
 
