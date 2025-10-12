@@ -1,0 +1,6 @@
+projectKey=spiderfoot
+serverUrl=https://sonarqube.blking.lan
+serverVersion=25.9.0.112764
+dashboardUrl=https://sonarqube.blking.lan/dashboard?id=spiderfoot
+ceTaskId=75e7f182-4dce-401b-a30f-2a6daf40ea91
+ceTaskUrl=https://sonarqube.blking.lan/api/ce/task?id=75e7f182-4dce-401b-a30f-2a6daf40ea91
