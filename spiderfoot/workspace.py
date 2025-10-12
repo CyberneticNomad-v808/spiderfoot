@@ -351,6 +351,174 @@ class SpiderFootWorkspace:
         
         return results
 
+    def start_multiscan(self, target_list: List[str], module_list: List[str],
+                       scan_name_prefix: str, enable_correlation: str = 'false',
+                       logging_queue=None) -> Dict[str, Any]:
+        """Start multi-target scan from workspace.
+
+        Args:
+            target_list: List of target dictionaries with 'value' and 'type' keys
+            module_list: List of module names to use
+            scan_name_prefix: Prefix for scan names
+            enable_correlation: Whether to enable correlation ('true'/'false')
+            logging_queue: Multiprocessing queue for logging
+
+        Returns:
+            dict: Multi-target scan result with scan_ids and status
+        """
+        import json
+        import multiprocessing as mp
+        from copy import deepcopy
+        import traceback
+
+        self.log.info(f"[MULTISCAN] Starting multi-target scan for workspace: {self.workspace_id}")
+        self.log.debug(f"[MULTISCAN] Input parameters - targets: {target_list}, modules: {module_list}, prefix: {scan_name_prefix}")
+
+        try:
+            self.log.debug(f"[MULTISCAN] Importing startSpiderFootScanner...")
+            from sfscan import startSpiderFootScanner
+            self.log.debug(f"[MULTISCAN] Import successful")
+
+            # Parse targets if they're still strings
+            if isinstance(target_list, str):
+                try:
+                    target_list = json.loads(target_list)
+                    self.log.debug(f"[MULTISCAN] Parsed {len(target_list)} targets from JSON")
+                except Exception as e:
+                    self.log.error(f"[MULTISCAN] Failed to parse targets JSON: {e}")
+                    raise ValueError(f"Invalid targets JSON: {e}")
+
+            # Parse modules if they're still strings
+            if isinstance(module_list, str):
+                try:
+                    module_list = json.loads(module_list)
+                    self.log.debug(f"[MULTISCAN] Parsed {len(module_list)} modules from JSON")
+                except Exception as e:
+                    self.log.error(f"[MULTISCAN] Failed to parse modules JSON: {e}")
+                    raise ValueError(f"Invalid modules JSON: {e}")
+
+            scan_ids = []
+
+            self.log.info(f"[MULTISCAN] Starting scan loop for {len(target_list)} targets")
+
+            # Start a scan for each target
+            for i, target in enumerate(target_list):
+                self.log.debug(f"[MULTISCAN] Processing target {i+1}/{len(target_list)}: {target}")
+
+                target_value = target['value'] if isinstance(target, dict) else target
+                target_type = target.get('type', '') if isinstance(target, dict) else ''
+
+                self.log.debug(f"[MULTISCAN] Target value: {target_value}, type: {target_type}")
+
+                # Map DOMAIN_NAME to INTERNET_NAME (DOMAIN_NAME is an event type, not a target type)
+                if target_type == 'DOMAIN_NAME':
+                    self.log.debug(f"[MULTISCAN] Mapping DOMAIN_NAME to INTERNET_NAME for target compatibility")
+                    target_type = 'INTERNET_NAME'
+
+                # If target type is not provided or empty, detect it
+                if not target_type:
+                    self.log.debug(f"[MULTISCAN] Detecting target type for: {target_value}")
+                    target_type = SpiderFootHelpers.targetTypeFromString(target_value)
+                    if target_type is None:
+                        self.log.error(f"[MULTISCAN] Could not determine target type for {target_value}")
+                        continue
+                    else:
+                        self.log.debug(f"[MULTISCAN] Detected target type: {target_type}")
+
+                # Normalize target value like other scan methods
+                original_value = target_value
+                if target_type in ["HUMAN_NAME", "USERNAME", "BITCOIN_ADDRESS"]:
+                    target_value = target_value.replace("\"", "")
+                else:
+                    target_value = target_value.lower()
+
+                if original_value != target_value:
+                    self.log.debug(f"[MULTISCAN] Normalized target value: {original_value} -> {target_value}")
+
+                # Generate scan name
+                scan_name = f"{scan_name_prefix} - {target_value}"
+                self.log.debug(f"[MULTISCAN] Generated scan name: {scan_name}")
+
+                # Create module configuration list (like in working examples)
+                modlist = module_list.copy()
+                self.log.debug(f"[MULTISCAN] Initial module list: {modlist}")
+
+                # Add our mandatory storage module
+                if "sfp__stor_db" not in modlist:
+                    modlist.append("sfp__stor_db")
+                    self.log.debug("[MULTISCAN] Added mandatory sfp__stor_db module")
+
+                # Delete the stdout module in case it crept in
+                if "sfp__stor_stdout" in modlist:
+                    modlist.remove("sfp__stor_stdout")
+                    self.log.debug("[MULTISCAN] Removed sfp__stor_stdout module")
+
+                self.log.debug(f"[MULTISCAN] Final module list: {modlist}")
+
+                # Create configuration copy for this scan
+                self.log.debug("[MULTISCAN] Creating configuration copy...")
+                cfg = deepcopy(self.config)
+
+                # Start the scan using the correct signature
+                scanId = SpiderFootHelpers.genScanInstanceId()
+                self.log.info(f"[MULTISCAN] Generated scan ID {scanId} for target {target_value}")
+
+                try:
+                    self.log.debug(f"[MULTISCAN] Starting process for scan {scanId}")
+                    # Use multiprocessing like the working examples
+                    # startSpiderFootScanner signature: (loggingQueue, *args)
+                    # where args are: (scanName, scanId, targetValue, targetType, moduleList, globalOpts)
+                    p = mp.Process(target=startSpiderFootScanner, args=(
+                        logging_queue, scan_name, scanId, target_value, target_type, modlist, cfg))
+                    p.daemon = True
+                    p.start()
+                    self.log.info(f"[MULTISCAN] Successfully started process for scan {scanId}")
+
+                    scan_ids.append(scanId)
+
+                    # Wait a moment for the scan to initialize in the database
+                    import time
+                    time.sleep(0.5)
+
+                    # Import the scan into the workspace
+                    self.log.debug(f"[MULTISCAN] Importing scan {scanId} into workspace {self.workspace_id}")
+                    self.import_single_scan(scanId, {
+                        'source': 'multi_target_scan',
+                        'scan_name_prefix': scan_name_prefix,
+                        'target_id': target.get('target_id', 'unknown') if isinstance(target, dict) else 'unknown',
+                        'imported_time': time.time()
+                    })
+                    self.log.debug(f"[MULTISCAN] Successfully imported scan {scanId} into workspace")
+
+                except Exception as e:
+                    self.log.error(f"[MULTISCAN] Failed to start scan for target {target_value}: {e}")
+                    self.log.error(f"[MULTISCAN] Traceback: {traceback.format_exc()}")
+                    continue
+
+            self.log.info(f"[MULTISCAN] Scan loop completed. Started {len(scan_ids)} out of {len(target_list)} scans")
+
+            if scan_ids:
+                message = f"Started {len(scan_ids)} scans successfully"
+                if enable_correlation.lower() == 'true':
+                    message += ". Correlation analysis will be available once scans complete"
+
+                self.log.info(f"[MULTISCAN] Success: {message}")
+                return {
+                    'success': True,
+                    'message': message,
+                    'scan_ids': scan_ids,
+                    'workspace_id': self.workspace_id
+                }
+            else:
+                error_msg = 'Failed to start any scans'
+                self.log.error(f"[MULTISCAN] {error_msg}")
+                return {'success': False, 'error': error_msg}
+
+        except Exception as e:
+            self.log.error(f"[MULTISCAN] Failed to start multi-target scan: {e}")
+            self.log.error(f"[MULTISCAN] Traceback: {traceback.format_exc()}")
+            return {'success': False, 'error': str(e)}
+
     def get_targets(self) -> List[dict]:
         """Get all targets in workspace."""
         return self.targets.copy()

@@ -142,7 +142,9 @@ class WorkspaceEndpoints:
             ws = SpiderFootWorkspace(self.config, workspace_id=workspace_id)
             target_list = [t.strip() for t in targets.split(',') if t.strip()]
             module_list = [m.strip() for m in modules.split(',') if m.strip()]
-            results = ws.start_multiscan(target_list, module_list, scan_name_prefix, enable_correlation)
+            # Get logging queue from the parent WebUiRoutes class
+            logging_queue = getattr(self, 'loggingQueue', None)
+            results = ws.start_multiscan(target_list, module_list, scan_name_prefix, enable_correlation, logging_queue)
             return {"success": True, "results": results}
         except Exception as e:
             return {"error": str(e)}
