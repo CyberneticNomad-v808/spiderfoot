@@ -144,6 +144,15 @@ def parseCert(rawcert: str, fqdn: str = None, expiringdays: int = 30) -> dict:
     return ret
 
 def getSession() -> 'requests.sessions.Session':
+    """Return requests session object.
+
+    Note: Proxy configuration is handled per-request in fetchUrl() via the
+    proxies parameter, not at the session level. This allows proper per-URL
+    proxy routing based on useProxyForUrl() logic.
+
+    Returns:
+        requests.sessions.Session: requests session
+    """
     session = requests.session()
     return session
 
@@ -176,7 +185,13 @@ def useProxyForUrl(url: str, opts=None, urlFQDN=None, isValidLocalOrLoopbackIp=N
             return False
     return True
 
-def fetchUrl(url: str, cookies: str = None, timeout: int = 30, useragent: str = "SpiderFoot", headers: dict = None, noLog: bool = False, postData: str = None, disableContentEncoding: bool = False, sizeLimit: int = None, headOnly: bool = False, verify: bool = True) -> dict:
+def fetchUrl(url: str, cookies: str = None, timeout: int = 30, useragent: str = "SpiderFoot", headers: dict = None, noLog: bool = False, postData: str = None, disableContentEncoding: bool = False, sizeLimit: int = None, headOnly: bool = False, verify: bool = True, proxies: dict = None) -> dict:
+    """Fetch URL content with proxy support.
+
+    Args:
+        proxies: Dict with 'http' and 'https' keys for proxy configuration.
+                 Set to None to use no proxy, or set values to None to explicitly disable proxies.
+    """
     if not isinstance(url, str):
         return None
     if not url or not url.strip():
@@ -205,11 +220,11 @@ def fetchUrl(url: str, cookies: str = None, timeout: int = 30, useragent: str = 
     session = getSession()
     try:
         if headOnly:
-            resp = session.head(url, timeout=timeout, headers=headers, verify=verify)
+            resp = session.head(url, timeout=timeout, headers=headers, verify=verify, proxies=proxies)
         elif postData:
-            resp = session.post(url, data=postData, timeout=timeout, headers=headers, verify=verify)
+            resp = session.post(url, data=postData, timeout=timeout, headers=headers, verify=verify, proxies=proxies)
         else:
-            resp = session.get(url, timeout=timeout, headers=headers, verify=verify)
+            resp = session.get(url, timeout=timeout, headers=headers, verify=verify, proxies=proxies)
         result['code'] = str(resp.status_code)
         result['status'] = resp.reason
         result['content'] = resp.content.decode('utf-8', errors='replace')
