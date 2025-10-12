@@ -171,7 +171,42 @@ class SpiderFoot:
         from .network import useProxyForUrl
         return useProxyForUrl(url, self.opts, urlFQDN=self.urlFQDN, isValidLocalOrLoopbackIp=self.isValidLocalOrLoopbackIp)
     def fetchUrl(self, url: str, cookies: str = None, timeout: int = 30, useragent: str = "SpiderFoot", headers: dict = None, noLog: bool = False, postData: str = None, disableContentEncoding: bool = False, sizeLimit: int = None, headOnly: bool = False, verify: bool = True) -> dict:
-        return fetchUrl(url, cookies, timeout, useragent, headers, noLog, postData, disableContentEncoding, sizeLimit, headOnly, verify)
+        """Fetch URL with proper proxy handling.
+
+        Proxy configuration is handled per-request, not at session level.
+        This allows proper per-URL proxy routing based on useProxyForUrl() logic.
+        """
+        # Determine proxy configuration for this URL
+        if self.useProxyForUrl(url):
+            # Build proxy string from SOCKS config
+            proxy_type = self.opts.get('_socks1type', '').lower()
+            proxy_host = self.opts.get('_socks2addr', '')
+            proxy_port = self.opts.get('_socks3port', '')
+            proxy_user = self.opts.get('_socks4user', '')
+            proxy_pass = self.opts.get('_socks5pwd', '')
+
+            if proxy_type and proxy_host and proxy_port:
+                if proxy_user and proxy_pass:
+                    proxy_url = f"{proxy_type}://{proxy_user}:{proxy_pass}@{proxy_host}:{proxy_port}"
+                else:
+                    proxy_url = f"{proxy_type}://{proxy_host}:{proxy_port}"
+                proxies = {
+                    'http': proxy_url,
+                    'https': proxy_url,
+                }
+            else:
+                proxies = None
+        else:
+            # Explicitly disable proxy by setting to None
+            # This overrides any session-level proxy settings
+            proxies = {
+                'http': None,
+                'https': None,
+            }
+
+        # Call network.fetchUrl with proxy configuration
+        from .network import fetchUrl as network_fetchUrl
+        return network_fetchUrl(url, cookies, timeout, useragent, headers, noLog, postData, disableContentEncoding, sizeLimit, headOnly, verify, proxies=proxies)
     def checkDnsWildcard(self, target: str) -> bool:
         return checkDnsWildcard(target)
     def modulesProducing(self, events: list) -> list:
