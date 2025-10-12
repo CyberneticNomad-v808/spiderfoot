@@ -19,12 +19,25 @@ class CSRFMiddleware:
     are logged as warnings but don't block requests to maintain functionality.
     """
 
-    def __init__(self):
+    def __init__(self, config=None):
         self.log = logging.getLogger(__name__)
-        self.development_mode = os.environ.get('SF_DEVELOPMENT_MODE', 'false').lower() == 'true'
+        self.config = config or {}
+
+        # Check if CSRF is enabled via config or environment
+        self.enabled = self.config.get('_csrf_enabled', False)
+
+        # Check development mode from config or environment
+        env_dev_mode = os.environ.get('SF_DEVELOPMENT_MODE', 'false').lower() == 'true'
+        self.development_mode = self.config.get('_csrf_development_mode', env_dev_mode)
+
+        if self.enabled:
+            self.log.info(f"CSRF protection initialized (development_mode={self.development_mode})")
 
     def __call__(self):
         """CherryPy tool hook for CSRF protection."""
+        if not self.enabled:
+            return
+
         if cherrypy.request.method.upper() in ('POST', 'PUT', 'DELETE', 'PATCH'):
             self._check_csrf_token()
 
@@ -72,17 +85,34 @@ class CSRFMiddleware:
             raise cherrypy.HTTPError(403, f"CSRF validation failed: {reason}")
 
 
-# Create the CherryPy tool
-csrf_middleware = CSRFMiddleware()
-cherrypy.tools.csrf_dev = cherrypy.Tool('before_handler', csrf_middleware, priority=50)
+def create_csrf_tool(config):
+    """
+    Create a CherryPy CSRF tool with the given configuration.
+
+    Args:
+        config: SpiderFoot configuration dictionary
+
+    Returns:
+        CherryPy Tool instance
+    """
+    csrf_middleware = CSRFMiddleware(config)
+    return cherrypy.Tool('before_handler', csrf_middleware, priority=50)
 
 
-def enable_development_csrf():
-    """Enable development-friendly CSRF protection."""
-    # Set development mode
-    os.environ['SF_DEVELOPMENT_MODE'] = 'true'
+def enable_csrf_protection(config=None):
+    """
+    Enable CSRF protection for the web server.
 
-    # Configure CherryPy to use the CSRF tool
+    Args:
+        config: SpiderFoot configuration dictionary (optional)
+    """
+    config = config or {}
+
+    # Register the CSRF tool
+    csrf_tool = create_csrf_tool(config)
+    cherrypy.tools.csrf_protection = csrf_tool
+
+    # Enable it in the configuration
     cherrypy.config.update({
-        'tools.csrf_dev.on': True
+        'tools.csrf_protection.on': True
     })
