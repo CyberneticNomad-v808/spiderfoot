@@ -858,7 +858,9 @@ class DbCore:
                     if self.dbh.fetchone()[0] == 0:
                         for row in self.eventDetails:
                             event, event_descr, event_raw, event_type = row
-                            qry = "INSERT OR IGNORE INTO tbl_event_types (event, event_descr, event_raw, event_type) VALUES (?, ?, ?, ?)"
+                            ph = get_placeholder(self.db_type)
+                            upsert_clause = get_upsert_clause(self.db_type, 'tbl_event_types', ['event'], ['event_descr', 'event_raw', 'event_type'])
+                            qry = f"INSERT INTO tbl_event_types (event, event_descr, event_raw, event_type) VALUES ({ph}, {ph}, {ph}, {ph}) {upsert_clause}"
                             params = (event, event_descr, event_raw, event_type)
                             try:
                                 self.dbh.execute(qry, params)
