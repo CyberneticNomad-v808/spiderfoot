@@ -2,6 +2,14 @@
     <footer class="navbar-default navbar-fixed-bottom">
       <div class="container-fluid text-center footer">
         <%
+        # Read build info
+        build_info = "unknown"
+        try:
+            with open('/home/spiderfoot/BUILD_INFO', 'r') as f:
+                build_info = f.read().strip()
+        except:
+            pass
+
         messages = [
             "<i class='glyphicon glyphicon-heart'></i>&nbsp;&nbsp;<a target=_new href='https://twitter.com/intent/follow?original_referer=https%3A%2F%2Fpublish.twitter.com%2F&ref_src=twsrc%5Etfw%7Ctwcamp%5Ebuttonembed%7Ctwterm%5Efollow%7Ctwgr%5Espiderfoot&screen_name=spiderfoot'>Follow SpiderFoot on Twitter for the latest updates.</a>",
             "<i class='glyphicon glyphicon-heart'></i>&nbsp;&nbsp;<a target=_new href='https://discord.gg/vyvztrG'>Join the SpiderFoot community Discord!</a>",
@@ -12,6 +20,7 @@
         message = messages[random.randint(0, len(messages)-1)]
         %>
         <span>${message}</span>
+        <span style="margin-left: 20px; color: #666; font-size: 0.85em;">| Build: ${build_info}</span>
       </div>
     </footer>
 

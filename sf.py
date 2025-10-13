@@ -19,8 +19,15 @@ architecture. It delegates all functionality to the SpiderFootOrchestrator
 while maintaining the original interface.
 """
 
+
 import sys
 import os
+from spiderfoot.sflib import SpiderFoot
+from spiderfoot.scan_service.scanner import startSpiderFootScanner
+from sfwebui import SpiderFootWebUi
+from spiderfoot import SpiderFootHelpers
+from spiderfoot import SpiderFootDb
+from spiderfoot.logger import logListenerSetup, logWorkerSetup
 
 # Import legacy components for backward compatibility
 from spiderfoot import __version__

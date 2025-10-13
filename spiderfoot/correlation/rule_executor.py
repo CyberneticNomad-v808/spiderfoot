@@ -102,25 +102,28 @@ class DefaultRuleExecutionStrategy(RuleExecutionStrategy):
             # Try the simplified test schema first
             try:
                 dbh_lock = getattr(dbh, 'dbhLock', None)
+                ph = getattr(dbh, '_placeholder', lambda: '?')()
+
                 if dbh_lock:
                     with dbh_lock:
-                        dbh.dbh.execute("SELECT scan_id, type, data FROM tbl_scan_results WHERE scan_id = ? LIMIT 1", [scan_id])
+                        dbh.dbh.execute(f"SELECT scan_instance_id, type, data FROM tbl_scan_results WHERE scan_instance_id = {ph} LIMIT 1", [scan_id])
                         test_row = dbh.dbh.fetchone()
                 else:
                     # For tests without lock
-                    dbh.dbh.execute("SELECT scan_id, type, data FROM tbl_scan_results WHERE scan_id = ? LIMIT 1", [scan_id])
+                    dbh.dbh.execute(f"SELECT scan_instance_id, type, data FROM tbl_scan_results WHERE scan_instance_id = {ph} LIMIT 1", [scan_id])
                     test_row = dbh.dbh.fetchone()
-                
+
                 # Use simplified schema for tests
-                base_query = "SELECT scan_id as hash, type, data, 'test_module' as module, 0 as created, 'ROOT' as source_event_hash FROM tbl_scan_results WHERE scan_id = ?"
+                base_query = f"SELECT hash, type, data, 'test_module' as module, 0 as created, 'ROOT' as source_event_hash FROM tbl_scan_results WHERE scan_instance_id = {ph}"
                 query_params = [scan_id]
-                
+
             except Exception:
                 # Use full production schema
-                base_query = """
-                    SELECT hash, type, data, module, generated, source_event_hash 
-                    FROM tbl_scan_results 
-                    WHERE scan_instance_id = ? AND false_positive = 0
+                ph = getattr(dbh, '_placeholder', lambda: '?')()
+                base_query = f"""
+                    SELECT hash, type, data, module, generated, source_event_hash
+                    FROM tbl_scan_results
+                    WHERE scan_instance_id = {ph} AND false_positive = 0
                 """
                 query_params = [scan_id]
             

@@ -32,7 +32,6 @@ chown -R spiderfoot:spiderfoot /home/spiderfoot/cache
 chown -R spiderfoot:spiderfoot /home/spiderfoot/data
 chmod -R 755 /home/spiderfoot/logs
 
-echo "Database will be created at: /home/spiderfoot/data/spiderfoot.db"
 echo "Starting SpiderFoot..."
 
 # Execute the original command
