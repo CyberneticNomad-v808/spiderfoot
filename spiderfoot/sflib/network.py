@@ -210,6 +210,13 @@ def fetchUrl(url: str, cookies: str = None, timeout: int = 30, useragent: str = 
         'headers': None,
         'realurl': url
     }
+    url = url.strip()
+    try:
+        parsed_url = urllib.parse.urlparse(url)
+    except Exception:
+        return result
+    if parsed_url.scheme not in ['http', 'https']:
+        return result
     session = getSession()
     try:
         if headOnly:
