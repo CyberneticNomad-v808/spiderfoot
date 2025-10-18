@@ -601,6 +601,20 @@ class SpiderFootDb:
         gc.collect()
 
     # --- Back-end database operations ---
+    def _placeholder(self, count=1):
+        """Return appropriate SQL placeholder(s) for current database type.
+
+        Args:
+            count: Number of placeholders needed
+
+        Returns:
+            String with placeholders (? for SQLite, %s for PostgreSQL)
+        """
+        if self.db_type == 'sqlite':
+            return ', '.join(['?'] * count) if count > 1 else '?'
+        else:  # postgresql
+            return ', '.join(['%s'] * count) if count > 1 else '%s'
+
     def create(self) -> None:
         return self._core.create()
     def close(self) -> None:

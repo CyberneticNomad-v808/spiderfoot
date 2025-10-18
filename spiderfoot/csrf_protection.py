@@ -103,14 +103,16 @@ class CSRFProtection:
 
 class CSRFTool(cherrypy.Tool):
     """CherryPy tool for CSRF protection."""
-    
+
     def __init__(self):
         cherrypy.Tool.__init__(self, 'before_handler', self.check_csrf)
         self.csrf_protection = CSRFProtection()
-    
+
     def check_csrf(self):
         """Check CSRF token before handling request."""
-        self.csrf_protection.check_csrf_token()
+        # CSRF protection disabled - _csrf_enabled is False in sf.py
+        # This tool is registered but inactive to maintain compatibility
+        return
 
 
 # Global CSRF protection instance

@@ -110,7 +110,7 @@ clean_local_images() {
 
     # Try to remove each image
     for img in $IMAGES; do
-        docker rmi -f $img 2>/dev/null && echo "Removed $img" || echo "Could not remove $img (may be in use)"
+        $SUDO_CMD docker rmi -f $img 2>/dev/null && echo "Removed $img" || echo "Could not remove $img (may be in use)"
     done
 
     echo -e "${GREEN}Local cleanup complete${NC}"
@@ -137,7 +137,7 @@ clean_remote_images() {
         gcloud artifacts docker images delete ${REGISTRY}@${version} --quiet 2>/dev/null || echo "Could not delete ${version}"
     done < /tmp/spiderfoot_versions.txt
 
-    rm -f /tmp/spiderfoot_versions.txt
+    $SUDO_CMD rm -f /tmp/spiderfoot_versions.txt
 
     echo -e "${GREEN}Remote cleanup complete${NC}"
 }
@@ -147,8 +147,8 @@ stop_container() {
     echo -e "${YELLOW}Stopping SpiderFoot container...${NC}"
 
     if docker ps -a | grep -q spiderfoot; then
-        docker stop spiderfoot 2>/dev/null || true
-        docker rm spiderfoot 2>/dev/null || true
+        $SUDO_CMD docker stop spiderfoot 2>/dev/null || true
+        $SUDO_CMD docker rm spiderfoot 2>/dev/null || true
         echo -e "${GREEN}Container stopped and removed${NC}"
     else
         echo "No SpiderFoot container found"
@@ -201,17 +201,23 @@ usage() {
     echo ""
     echo "Options:"
     echo "  --verbose, -verbose  - Show container logs during deploy (no -d flag)"
+    echo "  --sudo, sudo         - Use sudo for cleaning operations (docker rmi, rm, etc.)"
     echo ""
     echo "Examples:"
     echo "  $0 build"
     echo "  $0 deploy --verbose"
+    echo "  $0 clean-local --sudo"
+    echo "  $0 clean-all sudo"
 }
 
 # Parse flags
 VERBOSE="false"
+SUDO_CMD=""
 for arg in "$@"; do
     if [ "$arg" = "--verbose" ] || [ "$arg" = "-verbose" ]; then
         VERBOSE="true"
+    elif [ "$arg" = "--sudo" ] || [ "$arg" = "sudo" ]; then
+        SUDO_CMD="sudo"
     fi
 done
 
