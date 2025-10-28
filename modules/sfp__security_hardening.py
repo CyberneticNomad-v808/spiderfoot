@@ -329,8 +329,10 @@ class AuthenticationManager:
             'iat': datetime.now(timezone.utc)
         }
         
-        # Use a secret key for JWT
-        secret_key = os.environ.get('JWT_SECRET_KEY', 'default-secret-key')
+        # Use a secret key for JWT - fail if not configured
+        secret_key = os.environ.get('JWT_SECRET_KEY')
+        if not secret_key:
+            raise ValueError("JWT_SECRET_KEY environment variable must be set for authentication. Never use default secrets in production!")
         token = jwt.encode(payload, secret_key, algorithm='HS256')
         
         # Store session
@@ -361,7 +363,9 @@ class AuthenticationManager:
             
             if HAS_AUTH_LIBS:
                 try:
-                    secret_key = os.environ.get('JWT_SECRET_KEY', 'default-secret-key')
+                    secret_key = os.environ.get('JWT_SECRET_KEY')
+                    if not secret_key:
+                        raise ValueError("JWT_SECRET_KEY environment variable must be set")
                     payload = jwt.decode(token, secret_key, algorithms=['HS256'])
                     return payload
                 except jwt.ExpiredSignatureError:

@@ -34,18 +34,20 @@ class SettingsEndpoints:
 
     @cherrypy.expose
     def savesettings(self, allopts, token, configFile=None):
-        if str(token) != str(self.token):
-            # Render opts.tmpl with error message for CSRF error
-            templ = Template(filename='spiderfoot/templates/opts.tmpl', lookup=self.lookup)
-            return templ.render(
-                opts=self.config,
-                pageid='SETTINGS',
-                token=self.token,
-                version=__version__,
-                updated=None,
-                docroot=self.docroot,
-                error_message="Invalid CSRF token"
-            )
+        # Only check CSRF token if CSRF protection is enabled
+        if self.config.get('_csrf_enabled', False):
+            if str(token) != str(self.token):
+                # Render opts.tmpl with error message for CSRF error
+                templ = Template(filename='spiderfoot/templates/opts.tmpl', lookup=self.lookup)
+                return templ.render(
+                    opts=self.config,
+                    pageid='SETTINGS',
+                    token=self.token,
+                    version=__version__,
+                    updated=None,
+                    docroot=self.docroot,
+                    error_message="Invalid CSRF token"
+                )
         from spiderfoot import SpiderFootDb, SpiderFoot
         # Handle file upload
         if configFile and hasattr(configFile, 'file') and configFile.file:
@@ -79,12 +81,8 @@ class SettingsEndpoints:
         # Save settings from form
         else:
             try:
-                # allopts is key=value per line
-                new_config = {}
-                for line in allopts.splitlines():
-                    if '=' in line:
-                        k, v = line.split('=', 1)
-                        new_config[k.strip()] = v.strip()
+                # allopts is JSON string from the form
+                new_config = json.loads(allopts)
                 dbh = SpiderFootDb(self.config)
                 dbh.configSet(new_config)
                 sf = SpiderFoot(self.defaultConfig)
@@ -107,19 +105,18 @@ class SettingsEndpoints:
     def savesettingsraw(self, allopts, token):
         cherrypy.response.headers['Content-Type'] = "application/json; charset=utf-8"
         from spiderfoot import SpiderFootDb, SpiderFoot
-        if str(token) != str(self.token):
-            return json.dumps(["ERROR", "Invalid CSRF token"]).encode('utf-8')
+        # Only check CSRF token if CSRF protection is enabled
+        if self.config.get('_csrf_enabled', False):
+            if str(token) != str(self.token):
+                return json.dumps(["ERROR", "Invalid CSRF token"]).encode('utf-8')
         # Reset config to default
         if allopts == "RESET":
             self.reset_settings()
         # Save settings from raw
         else:
             try:
-                new_config = {}
-                for line in allopts.splitlines():
-                    if '=' in line:
-                        k, v = line.split('=', 1)
-                        new_config[k.strip()] = v.strip()
+                # allopts is JSON string
+                new_config = json.loads(allopts)
                 dbh = SpiderFootDb(self.config)
                 dbh.configSet(new_config)
                 sf = SpiderFoot(self.defaultConfig)

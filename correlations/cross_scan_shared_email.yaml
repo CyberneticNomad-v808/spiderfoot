@@ -1,20 +1,25 @@
 id: cross_scan_shared_email
-version: "1"
+version: '1'
 meta:
   name: Shared email address across scans
-  description: >
-    The same email address was found in multiple scans, indicating shared accounts, personnel, or breaches.
+  description: 'The same email address was found in multiple scans, indicating shared
+    accounts, personnel, or breaches.
+
+    '
   risk: INFO
   scope: workspace
 collections:
-  collect:
+- id: cross_scan_shared_email_collection
+  name: Shared email address across scans
+  condition:
+    collect:
     - method: exact
       field: type
       value: EMAILADDR
 aggregation:
   field: data
 analysis:
-  - method: threshold
-    field: data
-    minimum: 2
-headline: "Email address {data} found in multiple scans"
+- method: threshold
+  field: data
+  minimum: 2
+headline: Email address {data} found in multiple scans

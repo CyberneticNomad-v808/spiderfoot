@@ -1,23 +1,26 @@
 id: human_name_in_whois
-version: "1"
+version: '1'
 meta:
   name: A human name was found in Whois data
-  description: >
-    A human name was found in Whois data. The name found may
-    be that of a highly privileged person responsible for
-    maintaining the infrastructure of the target.
+  description: 'A human name was found in Whois data. The name found may be that of
+    a highly privileged person responsible for maintaining the infrastructure of the
+    target.
 
-    Names are increasingly rarely found in Whois data due to
-    GDPR.
+    Names are increasingly rarely found in Whois data due to GDPR.
+
+    '
   risk: INFO
 collections:
-  collect:
-      - method: exact
-        field: type
-        value: HUMAN_NAME
-      - method: regex
-        field: source.type
-        value: .*WHOIS.*
+- id: human_name_in_whois_collection
+  name: A human name was found in Whois data
+  condition:
+    collect:
+    - method: exact
+      field: type
+      value: HUMAN_NAME
+    - method: regex
+      field: source.type
+      value: .*WHOIS.*
 aggregation:
   field: data
-headline: "Human name found in Whois record: {data}"
+headline: 'Human name found in Whois record: {data}'

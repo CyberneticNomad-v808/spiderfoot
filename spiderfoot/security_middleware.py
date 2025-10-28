@@ -37,7 +37,7 @@ class SecurityConfigDefaults:
     """Default security configuration values."""
     
     WEB_SECURITY = {
-        'CSRF_ENABLED': True,
+        'CSRF_ENABLED': False,  # Disabled by default for backward compatibility
         'RATE_LIMITING_ENABLED': True,
         'SECURE_SESSIONS': True,
         'AUTHENTICATION_REQUIRED': False,
@@ -176,7 +176,8 @@ class SpiderFootSecurityMiddleware:
                 self.config_manager = None
             
             # Core security components
-            csrf_secret = self.config.get('security.csrf.secret_key', 'default-secret')
+            import secrets
+            csrf_secret = self.config.get('_csrf_secret_key') or secrets.token_hex(32)
             try:
                 self.csrf = CSRFProtection(secret_key=csrf_secret)
             except Exception as e:
@@ -220,7 +221,7 @@ class SpiderFootSecurityMiddleware:
                 self.jwt_manager = None
             
             # Security logger with proper initialization
-            log_file = self.config.get('security.logging.log_file', 'logs/security.log')
+            log_file = self.config.get('_security_log_file', 'logs/security.log')
             try:
                 self.security_logger = SecurityLogger(log_file=log_file)
             except Exception as e:
@@ -236,17 +237,20 @@ class SpiderFootSecurityMiddleware:
     
     def _get_security_config(self) -> Dict[str, Any]:
         """Get security configuration with defaults."""
+        # Parse bypass_auth_endpoints from comma-separated string to list
+        bypass_endpoints = self.config.get('_bypass_auth_endpoints', '/static,/favicon.ico,/robots.txt,/api/docs,/api/redoc')
+        if isinstance(bypass_endpoints, str):
+            bypass_endpoints = [e.strip() for e in bypass_endpoints.split(',')]
+
         return {
-            'csrf_enabled': self.config.get('security.csrf.enabled', True),
-            'rate_limiting_enabled': self.config.get('security.rate_limiting.enabled', True),
-            'input_validation_enabled': self.config.get('security.input_validation.enabled', True),
-            'session_security_enabled': self.config.get('security.session_security.enabled', True),
-            'api_security_enabled': self.config.get('security.api_security.enabled', True),
-            'security_headers_enabled': self.config.get('security.headers.enabled', True),
-            'security_logging_enabled': self.config.get('security.logging.enabled', True),
-            'bypass_auth_endpoints': self.config.get('security.bypass_auth', [
-                '/static', '/favicon.ico', '/robots.txt', '/api/docs', '/api/redoc'
-            ])
+            'csrf_enabled': self.config.get('_csrf_enabled', False),
+            'rate_limiting_enabled': self.config.get('_rate_limiting_enabled', False),
+            'input_validation_enabled': self.config.get('_input_validation_enabled', True),
+            'session_security_enabled': self.config.get('_session_security_enabled', True),
+            'api_security_enabled': self.config.get('_api_security_enabled', False),
+            'security_headers_enabled': self.config.get('_security_headers_enabled', True),
+            'security_logging_enabled': self.config.get('_security_logging_enabled', True),
+            'bypass_auth_endpoints': bypass_endpoints
         }
 
 

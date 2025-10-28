@@ -838,7 +838,7 @@ $(document).ready(function() {
         
         // Get workspace details to get scan IDs
         $.get('${docroot}/workspaceget', { workspace_id: workspaceId }, function(data) {
-            if (data.success && data.scans && data.scans.length > 0) {
+            if (data.scans && data.scans.length > 0) {
                 var scanIds = data.scans.map(function(scan) { return scan.scan_id; });
                 
                 var downloadUrl;
@@ -1099,13 +1099,13 @@ function viewWorkspace(workspaceId) {
 
 function editWorkspace(workspaceId) {
     $.get('${docroot}/workspaceget', { workspace_id: workspaceId }, function(data) {
-        if (data.success) {
+        if (data.workspace_id) {
             $('#editWorkspaceId').val(workspaceId);
             $('#editWorkspaceName').val(data.name);
             $('#editWorkspaceDescription').val(data.description);
             $('#editWorkspaceModal').modal('show');
         } else {
-            alertify.error('Failed to load workspace: ' + data.error);
+            alertify.error('Failed to load workspace: ' + (data.error || 'Unknown error'));
         }
     });
 }
@@ -1123,7 +1123,7 @@ function importScans(workspaceId) {
 function deleteWorkspace(workspaceId) {
     // Get workspace name for the confirmation dialog
     $.get('${docroot}/workspaceget', { workspace_id: workspaceId }, function(data) {
-        var workspaceName = data.success ? data.name : 'this workspace';
+        var workspaceName = data.workspace_id ? data.name : 'this workspace';
         
         alertify.confirm(
             'Delete Workspace',
@@ -1189,10 +1189,10 @@ function deleteWorkspace(workspaceId) {
 
 function startMultiTargetScan(workspaceId) {
     $('#scanWorkspaceId').val(workspaceId);
-    
+
     // Load workspace targets
     $.get('${docroot}/workspaceget', { workspace_id: workspaceId }, function(data) {
-        if (data.success && data.targets && data.targets.length > 0) {
+        if (data.targets && data.targets.length > 0) {
             displayTargetSelection(data.targets);
             loadAvailableModules();
             $('#multiTargetScanModal').modal('show');

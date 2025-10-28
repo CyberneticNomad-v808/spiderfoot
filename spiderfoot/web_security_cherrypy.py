@@ -373,7 +373,7 @@ def create_secure_cherrypy_app(config=None) -> SpiderFootSecurityManager:
     # Load default security configuration
     default_config = {
         'secret_key': os.environ.get('SECRET_KEY') or os.urandom(32).hex(),
-        'csrf_enabled': True,
+        'csrf_enabled': False,  # Disabled by default for backward compatibility
         'rate_limiting_enabled': True,
         'secure_sessions': True,
         'authentication_required': False,

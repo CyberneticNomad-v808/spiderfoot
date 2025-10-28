@@ -1,4 +1,0 @@
-recursive-include modules *
-recursive-include correlations *
-recursive-include spiderfoot *
-include sf.py sfcli.py sfapi.py sfwebui.py

@@ -262,10 +262,22 @@ def useProxyForUrl(self, url: str) -> bool:
     Returns:
         bool: should the configured proxy be used?
 
-    Todo:
-        Allow using TOR only for .onion addresses
+    Note:
+        - Always uses TOR proxy for .onion addresses (Tor hidden services)
+        - Uses proxy for other URLs based on SOCKS configuration
+        - Never proxies localhost, local IPs, or the proxy host itself
     """
     host = self.urlFQDN(url).lower().rstrip('.').strip()
+
+    # CRITICAL: Always use proxy for .onion addresses (Tor hidden services)
+    # These MUST go through Tor and cannot be resolved via regular DNS
+    if host.endswith('.onion'):
+        # Check if we have any proxy configured
+        if self.opts.get('_socks1type') and self.opts.get('_socks2addr') and self.opts.get('_socks3port'):
+            return True
+        # If no proxy configured but .onion requested, this will fail later
+        # but we should still return True to attempt proxy routing
+        return True
 
     if not self.opts['_socks1type']:
         return False

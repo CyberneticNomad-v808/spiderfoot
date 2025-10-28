@@ -1,21 +1,24 @@
 id: outlier_country
-version: "1"
+version: '1'
 meta:
   name: Outlier country
-  description: >
-    A country that appeared in 10% or less of the total countries
-    found. Outliers can often reveal entities that are rare and
-    therefore interesting.
+  description: 'A country that appeared in 10% or less of the total countries found.
+    Outliers can often reveal entities that are rare and therefore interesting.
+
+    '
   risk: INFO
   scope: workspace
 collections:
-  collect:
-      - method: exact
-        field: type
-        value: COUNTRY_NAME
+- id: outlier_country_collection
+  name: Outlier country
+  condition:
+    collect:
+    - method: exact
+      field: type
+      value: COUNTRY_NAME
 aggregation:
   field: data
 analysis:
-  - method: outlier
-    maximum_percent: 10
-headline: "Outlier country found: {data}"
+- method: outlier
+  maximum_percent: 10
+headline: 'Outlier country found: {data}'

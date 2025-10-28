@@ -1,23 +1,26 @@
 id: outlier_ipaddress
-version: "1"
+version: '1'
 meta:
   name: Outlier IP address
-  description: >
-    An IP address that appeared in 10% or less of the
-    total IP addresses found. Outliers can often reveal
-    entities that are rare and therefore interesting.
+  description: 'An IP address that appeared in 10% or less of the total IP addresses
+    found. Outliers can often reveal entities that are rare and therefore interesting.
+
+    '
   risk: INFO
   scope: workspace
 collections:
-  collect:
+- id: outlier_ipaddress_collection
+  name: Outlier IP address
+  condition:
+    collect:
     - method: exact
       field: type
       value:
-        - IP_ADDRESS
-        - IPV6_ADDRESS
+      - IP_ADDRESS
+      - IPV6_ADDRESS
 aggregation:
   field: data
 analysis:
-  - method: outlier
-    maximum_percent: 10
-headline: "Outlier IP address found: {data}"
+- method: outlier
+  maximum_percent: 10
+headline: 'Outlier IP address found: {data}'

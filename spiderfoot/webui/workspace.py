@@ -238,3 +238,35 @@ class WorkspaceEndpoints:
             return "{}"
         except Exception as e:
             return str(e)
+
+    @cherrypy.expose
+    @cherrypy.tools.json_out()
+    def workspaceperiodicscans(self, workspace_id):
+        """Get periodic scan schedules for workspace.
+
+        Stub implementation - returns empty schedules array.
+        Full periodic scan scheduling feature is not yet implemented.
+        See /stuff/PROJECTS.md for future enhancement plans.
+
+        Args:
+            workspace_id: The workspace ID to get schedules for
+
+        Returns:
+            dict: JSON response with success status and empty schedules array
+        """
+        try:
+            # TODO: Implement full periodic scan scheduling feature
+            # - Database table: tbl_workspace_schedules
+            # - CRUD endpoints for schedule management
+            # - Background scheduler service
+            # - UI forms for creating/editing schedules
+            return {
+                "success": True,
+                "schedules": []
+            }
+        except Exception as e:
+            return {
+                "success": False,
+                "error": str(e),
+                "schedules": []
+            }

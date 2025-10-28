@@ -482,9 +482,11 @@ class WebUiRoutes(SettingsEndpoints, ScanEndpoints, ExportEndpoints, WorkspaceEn
     @cherrypy.expose
     def savesettings(self, allopts, token, configFile=None):
         """Save settings"""
-        if not hasattr(self, 'token') or self.token != token:
-            return self.error("Invalid token")
-        
+        # Only check CSRF token if CSRF protection is enabled
+        if self.config.get('_csrf_enabled', False):
+            if not hasattr(self, 'token') or str(self.token) != str(token):
+                return self.error("Invalid token")
+
         try:
             import json
             dbh = self._get_dbh()

@@ -29,11 +29,43 @@ RULE_SCHEMA = {
             },
             "required": ["name", "description", "risk"]
         },
-        "collections": {"type": "object"},
+        "collections": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "id": {"type": "string"},
+                    "name": {"type": "string"},
+                    "condition": {"type": "object"}
+                },
+                "required": ["id", "name", "condition"]
+            }
+        },
+        "aggregation": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "collections": {
+                        "type": "array",
+                        "items": {"type": "string"}
+                    },
+                    "key": {"type": "string"}
+                }
+            }
+        },
+        "analysis": {
+            "type": "object",
+            "properties": {
+                "method": {"type": "string"},
+                "conditions": {"type": "array"}
+            }
+        },
         "headline": {"type": "string"},
         "enabled": {"type": "boolean"},
         "id": {"type": "string"},
-        "version": {"type": "string"}
+        "version": {"type": "string"},
+        "extra": {"type": "object"}
     },
     "required": ["meta", "collections", "headline"]
 }

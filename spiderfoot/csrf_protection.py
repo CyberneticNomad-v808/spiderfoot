@@ -149,23 +149,31 @@ def csrf_token():
 
 def init_csrf_protection(app_config=None):
     """Initialize CSRF protection for CherryPy application.
-    
+
     Args:
         app_config: Optional configuration dictionary
-        
+
     Returns:
         CSRFProtection: The initialized CSRF protection instance
     """
+    # Only enable CSRF if explicitly enabled in config
+    csrf_enabled = False
+    if app_config:
+        csrf_enabled = app_config.get('_csrf_enabled', False)
+        # Handle string values from config files
+        if isinstance(csrf_enabled, str):
+            csrf_enabled = csrf_enabled.lower() in ('true', '1', 'yes')
+
     # Enable sessions
     cherrypy.config.update({
         'tools.sessions.on': True,
         'tools.sessions.timeout': 60,  # Session timeout in minutes
-        'tools.csrf.on': True  # Enable CSRF protection by default
+        'tools.csrf.on': csrf_enabled  # Respect user config, not hardcoded
     })
-    
+
     # Make csrf_token function available globally
     cherrypy.config.update({
         'tools.staticdir.root': cherrypy.config.get('tools.staticdir.root', ''),
     })
-    
+
     return csrf_protection

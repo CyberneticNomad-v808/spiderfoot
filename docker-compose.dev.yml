@@ -1,0 +1,136 @@
+# ============================================
+# Number-Two-Scope Development Compose (Stub)
+# ============================================
+# This is a STUB file for development use.
+# Include this in your infrastructure docker-compose setup (e.g., /stuff/blking_local_proxy/docker-compose.yml)
+#
+# USAGE:
+#   docker compose -f docker-compose.dev.yml up
+#
+# HOT-RELOAD STRATEGY:
+#   - Source code mounted read-only from host (/stuff/spiderfoot)
+#   - Watchdog monitors changes and auto-restarts application
+#   - Data/logs/cache remain in Docker volumes (NOT mounted from host)
+#   - No database services included (expects external infrastructure)
+#
+# ============================================
+
+# ============================================
+# REQUIRED ENVIRONMENT VARIABLES
+# ============================================
+# Add these to your infrastructure .env file:
+#
+# # Database Configuration
+# SHARED_POSTGRES_HOST=unified-postgres
+# POSTGRES_PASSWORD=secure_postgres_password_2025
+# POSTGRES_USER=postgres
+# POSTGRES_DB=postgres
+# POSTGRES_PORT=5432
+#
+# # Number-Two-Scope Database Configuration
+# SPIDERFOOT_DB_HOST=${SHARED_POSTGRES_HOST}
+# SPIDERFOOT_DB_PORT=5432
+# SPIDERFOOT_DB_NAME=spiderfoot_db
+# SPIDERFOOT_DB_USER=spiderfoot
+# SPIDERFOOT_DB_PASSWORD=spiderfoot_pass
+#
+# # Redis Configuration
+# REDIS_URL=redis://unified-redis:6379/0
+# REDIS_PASSWORD=redis_secure_2025
+#
+# # Application Configuration
+# TZ=America/New_York
+# DOMAIN=blking.lan
+# LOG_LEVEL=info
+#
+# # Security
+# JWT_SECRET=your-super-secure-jwt-secret-change-this-in-production
+#
+# ============================================
+
+version: '3.8'
+
+services:
+  number-two-scope:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        - DEV_MODE=true
+    image: number-two-scope:dev
+    container_name: number-two-scope
+    restart: unless-stopped
+    user: "1000:1000"
+    environment:
+      # Development mode flags
+      - SF_DEV_MODE=true
+      - PYTHONUNBUFFERED=1
+
+      # Database configuration (from infrastructure .env)
+      - SPIDERFOOT_DB_HOST=${SPIDERFOOT_DB_HOST}
+      - SPIDERFOOT_DB_PORT=${SPIDERFOOT_DB_PORT:-5432}
+      - SPIDERFOOT_DB_NAME=${SPIDERFOOT_DB_NAME:-spiderfoot_db}
+      - SPIDERFOOT_DB_USER=${SPIDERFOOT_DB_USER:-spiderfoot}
+      - SPIDERFOOT_DB_PASSWORD=${SPIDERFOOT_DB_PASSWORD}
+
+      # Redis configuration (from infrastructure .env)
+      - REDIS_URL=${REDIS_URL}
+      - REDIS_PASSWORD=${REDIS_PASSWORD}
+
+      # Application configuration
+      - TZ=${TZ:-America/New_York}
+      - LOG_LEVEL=${LOG_LEVEL:-info}
+      - JWT_SECRET=${JWT_SECRET}
+
+    volumes:
+      # HOT-RELOAD: Mount source code directories (READ-ONLY)
+      # This syncs changes from host to container for live development
+      - ./spiderfoot:/home/spiderfoot/spiderfoot:ro
+      - ./modules:/home/spiderfoot/modules:ro
+      - ./sf.py:/home/spiderfoot/sf.py:ro
+      - ./sf_orchestrator.py:/home/spiderfoot/sf_orchestrator.py:ro
+      - ./sfwebui.py:/home/spiderfoot/sfwebui.py:ro
+      - ./dev-entrypoint.py:/home/spiderfoot/dev-entrypoint.py:ro
+
+      # Persistent data volumes (NOT mounted from host)
+      - number_two_scope_logs:/home/spiderfoot/logs
+      - number_two_scope_cache:/home/spiderfoot/cache
+      - number_two_scope_config:/home/spiderfoot/config
+      - number_two_scope_data:/home/spiderfoot/data
+
+    networks:
+      - blking_private_network
+
+    ports:
+      - "5001:5001"  # Web UI
+      - "8001:8001"  # API
+
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=blking_private_network"
+      - "traefik.http.routers.number-two-scope.rule=Host(`number-two-scope.blking.lan`)"
+      - "traefik.http.services.number-two-scope.loadbalancer.server.port=5001"
+      - "traefik.http.routers.number-two-scope.tls=true"
+
+    command: ["python", "-u", "/home/spiderfoot/dev-entrypoint.py"]
+
+    # Expects these services from infrastructure compose
+    depends_on:
+      - unified-postgres
+      - unified-redis
+
+# ============================================
+# Networks (External - from infrastructure)
+# ============================================
+networks:
+  blking_private_network:
+    external: true
+
+# ============================================
+# Volumes (Local to this service)
+# ============================================
+volumes:
+  number_two_scope_logs:
+  number_two_scope_cache:
+  number_two_scope_config:
+  number_two_scope_data:

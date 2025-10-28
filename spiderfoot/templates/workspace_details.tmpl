@@ -1205,7 +1205,7 @@ function multiTargetScan(workspaceId) {
     
     // Load workspace targets
     $.get('${docroot}/workspaceget', { workspace_id: workspaceId }, function(data) {
-        if (data.success && data.targets && data.targets.length > 0) {
+        if (data.targets && data.targets.length > 0) {
             displayTargetSelection(data.targets);
             loadAvailableModules();
             $('#multiTargetScanModal').modal('show');

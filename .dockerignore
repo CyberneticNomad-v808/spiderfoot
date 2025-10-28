@@ -1,56 +1,106 @@
+# ============================================
+# Number-Two-Scope .dockerignore
+# (Formerly SpiderFoot - Enhanced by BLKC)
+# ============================================
+
+# Git files
 .git/
+.gitignore
+.gitattributes
 
-build
-dist
-*.egg-info
-*.egg/
-*.pyc
-*.swp
-
-venv/
-cache/
-log/
-logs/
-data/
-spiderfoot.db*
-spiderfoot.test.db
-
-__pycache__
-htmlcov/
-# docs/ - commented out to include documentation in container
-
-.github/
-react-web-interface
-test/
-docker-compose*
+# Docker files (exclude from copy)
 Dockerfile
 Dockerfile.full
+docker-compose*.yml
 !docker-entrypoint.sh
-.pre-commit-config.yml
-docker-compose-examples/
-THANKYOU
-# README.md - commented out to include README in container
+!dev-entrypoint.py
+.dockerignore
 
-.pylintrc
-.ruff_cache
-.pytest_cache
-
-.gitignore
-# *.md - commented out to include markdown documentation
-.vscode
-.idea
-__pycache__
+# Build artifacts
+build/
+dist/
+*.egg-info/
+*.egg/
+__pycache__/
 *.pyc
-.pytest_cache
-*.log
-.DS_Store
-Thumbs.db
+*.pyo
+*.pyd
+*.so
+
+# Python virtual environments
+venv/
+env/
+ENV/
+.venv/
+
+# IDE and editor files
+.vscode/
+.idea/
 *.swp
 *.swo
 *~
+.DS_Store
+Thumbs.db
+
+# Testing
+test/
+tests/
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+*.test.db
+
+# CI/CD
+.github/
+.gitlab-ci.yml
+.travis.yml
+.pre-commit-config.yml
+
+# Logs and runtime data
+logs/
+log/
+*.log
+cache/
+data/
+spiderfoot.db*
+*.db-shm
+*.db-wal
+
+# Documentation - KEEP INCLUDED for help system
+# docs/ - commented out to include documentation in container
+THANKYOU
+# *.md - commented out to include markdown documentation
+
+# Code quality tools
+.pylintrc
+.ruff_cache
+.mypy_cache/
+
+# Environment files
 .env
+.env.*
 .env.local
-node_modules
+
+# Node.js
+node_modules/
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
+
+# Archives and HAR files
+*.har
+*.zip
+*.tar.gz
+*.tar
+
+# React/Frontend (if separate)
+react-web-interface/
+
+# Examples
+docker-compose-examples/
+
+# Temporary files
+tmp/
+temp/
+*.tmp

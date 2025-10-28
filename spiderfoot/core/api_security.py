@@ -427,7 +427,10 @@ class APISecurityMiddleware:
     def __init__(self, config: Dict[str, Any]):
         self.config = config
         self.rate_limiter = AdvancedRateLimiter()
-        self.api_key_manager = APIKeyManager(config.get('secret_key', 'default-secret'))
+        # Get secret key from config or environment, auto-generate if missing
+        import secrets
+        secret_key = config.get('_csrf_secret_key') or os.environ.get('SPIDERFOOT_SECRET_KEY') or secrets.token_hex(32)
+        self.api_key_manager = APIKeyManager(secret_key)
         self.request_validator = RequestValidator()
         self.ddos_protection = DDoSProtection()
         self.logger = logging.getLogger('spiderfoot.api.security')

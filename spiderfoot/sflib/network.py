@@ -26,11 +26,22 @@ from .helpers import validIP, validIP6
 from datetime import datetime, timezone
 
 def resolveHost(host: str) -> list:
-    """Return a normalised IPv4 resolution of a hostname."""
+    """Return a normalised IPv4 resolution of a hostname.
+
+    Note: .onion addresses are NOT resolved here - they must be resolved
+    by the Tor network via SOCKS5 proxy. Attempting local DNS resolution
+    of .onion addresses will fail and leak privacy.
+    """
     import socket
     from .helpers import normalizeDNS
     if not host:
         return []
+
+    # CRITICAL: Never attempt to resolve .onion addresses via regular DNS
+    # They can only be resolved through Tor's SOCKS5 proxy
+    if host.lower().endswith('.onion'):
+        return []
+
     try:
         # Use gethostbyname_ex for patching/mocking compatibility in tests
         addrs = normalizeDNS(socket.gethostbyname_ex(host))
@@ -55,8 +66,18 @@ def resolveIP(ipaddr: str) -> list:
     return list(set(addrs))
 
 def resolveHost6(hostname: str) -> list:
+    """Return IPv6 addresses for a hostname.
+
+    Note: .onion addresses are NOT resolved here - they must be resolved
+    by the Tor network via SOCKS5 proxy.
+    """
     if not hostname:
         return []
+
+    # CRITICAL: Never attempt to resolve .onion addresses via regular DNS
+    if hostname.lower().endswith('.onion'):
+        return []
+
     addrs = list()
     try:
         for r in socket.getaddrinfo(hostname, None, socket.AF_INET6):
@@ -191,6 +212,18 @@ def fetchUrl(url: str, cookies: str = None, timeout: int = 30, useragent: str = 
     Args:
         proxies: Dict with 'http' and 'https' keys for proxy configuration.
                  Set to None to use no proxy, or set values to None to explicitly disable proxies.
+
+    Note on DNS Resolution and .onion addresses:
+        When using SOCKS5 proxy with the requests library (which uses PySocks under the hood),
+        DNS resolution is automatically performed REMOTELY by the SOCKS5 proxy server, NOT locally.
+        This is critical for:
+          1. .onion addresses - which can ONLY be resolved by Tor's DNS
+          2. Privacy - prevents DNS leaks that could expose your queries
+          3. Anonymity - keeps all network activity within the Tor network
+
+        The requests library will pass the hostname directly to the SOCKS5 proxy,
+        and Tor will resolve it using its internal DNS resolver (DNSPort 8853 in our config).
+        We ensure local DNS is never attempted by blocking .onion in resolveHost/resolveHost6.
     """
     if not isinstance(url, str):
         return None

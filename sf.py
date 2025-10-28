@@ -99,6 +99,15 @@ sfConfig = {
     '_socks5pwd': '',
     '_csrf_enabled': False,
     '_csrf_development_mode': True,
+    '_csrf_secret_key': None,
+    '_rate_limiting_enabled': False,
+    '_input_validation_enabled': True,
+    '_session_security_enabled': True,
+    '_api_security_enabled': False,
+    '_security_headers_enabled': True,
+    '_security_logging_enabled': True,
+    '_security_log_file': 'logs/security.log',
+    '_bypass_auth_endpoints': '/static,/favicon.ico,/robots.txt,/api/docs,/api/redoc',
 }
 
 sfOptdescs = {
@@ -117,6 +126,15 @@ sfOptdescs = {
     '_socks5pwd': "SOCKS Password. Valid only for SOCKS5 servers.",
     '_csrf_enabled': "Enable CSRF (Cross-Site Request Forgery) protection for the web interface. When enabled, POST/PUT/DELETE requests must include a valid CSRF token.",
     '_csrf_development_mode': "CSRF development mode. When enabled, CSRF validation failures are logged as warnings but don't block requests. Useful for single-user development or protected LAN deployments. When disabled, CSRF failures will return 403 Forbidden errors.",
+    '_csrf_secret_key': "Secret key for CSRF token generation. Leave empty (None) to auto-generate a secure random key on startup. For production with multiple instances, set the same key across all instances.",
+    '_rate_limiting_enabled': "Enable rate limiting to prevent abuse. Recommended for public-facing deployments. When disabled, no rate limits are enforced.",
+    '_input_validation_enabled': "Enable input validation to prevent injection attacks. Should remain enabled unless you have specific compatibility issues.",
+    '_session_security_enabled': "Enable session security features (timeouts, validation, secure cookies). Recommended for production deployments.",
+    '_api_security_enabled': "Enable API authentication (JWT/API keys). Required for production API access. When disabled, API endpoints are accessible without authentication.",
+    '_security_headers_enabled': "Enable security headers (X-Frame-Options, Content-Security-Policy, etc.). Recommended for production to prevent common web attacks.",
+    '_security_logging_enabled': "Enable detailed security event logging. Logs authentication attempts, blocked requests, and security violations.",
+    '_security_log_file': "Path to security audit log file. Can be absolute or relative to SpiderFoot root directory.",
+    '_bypass_auth_endpoints': "Comma-separated list of URL paths that bypass authentication checks. Typically static assets and public API documentation.",
     '_modulesenabled': "Modules enabled for the scan."
 }
 

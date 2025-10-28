@@ -74,7 +74,7 @@ class SpiderFootSecurityManager:
     
     def _init_csrf_protection(self) -> None:
         """Initialize CSRF protection."""
-        if self.app.config.get('CSRF_ENABLED', True):
+        if self.app.config.get('CSRF_ENABLED', False):
             secret_key = self.app.config.get('SECRET_KEY') or os.urandom(32)
             self.csrf_protection = CSRFProtection(self.app, secret_key)
     
@@ -443,7 +443,7 @@ def create_secure_app(config=None) -> Flask:
     # Load default security configuration
     app.config.update({
         'SECRET_KEY': os.environ.get('SECRET_KEY') or os.urandom(32),
-        'CSRF_ENABLED': True,
+        'CSRF_ENABLED': False,  # Disabled by default for backward compatibility
         'RATE_LIMITING_ENABLED': True,
         'SECURE_SESSIONS': True,
         'AUTHENTICATION_REQUIRED': False,
