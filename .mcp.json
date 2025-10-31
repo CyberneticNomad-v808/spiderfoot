@@ -1,0 +1,15 @@
+{
+"mcpServers": {
+    "context7": {
+      "command": "npx",
+      "args": [
+        "mcp-server-context7",
+        "--url", "http://localhost:8081"
+      ],
+      "env": {
+        "CONTEXT7_API_KEY": "ctx7sk-183f8216-0e43-414a-8d17-448a44d7827a",
+	"_MCP_API": "ctx7sk-183f8216-0e43-414a-8d17-448a44d7827a"
+      }
+    }
+  }
+}

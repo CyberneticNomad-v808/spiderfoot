@@ -39,25 +39,31 @@ class WebUiRoutes(SettingsEndpoints, ScanEndpoints, ExportEndpoints, WorkspaceEn
 
         self.docroot = web_config.get('root', '/').rstrip('/')
         self.defaultConfig = deepcopy(config)
+
+        # Load modules FIRST before unserializing config from database
+        # This ensures module options are properly loaded as reference points
+        try:
+            import os
+            script_dir = os.path.dirname(os.path.abspath(__file__))
+            mod_dir = os.path.join(script_dir, '../../modules')
+            if os.path.exists(mod_dir):
+                modules = SpiderFootHelpers.loadModulesAsDict(mod_dir, ['sfp_template.py'])
+                self.defaultConfig['__modules__'] = modules
+            else:
+                self.defaultConfig['__modules__'] = {}
+        except Exception:
+            self.defaultConfig['__modules__'] = {}
+
+        # Now initialize database and load saved config
         dbh = SpiderFootDb(self.defaultConfig, init=True)
         sf = SpiderFoot(self.defaultConfig)
+        # This will properly merge saved module settings because modules are now loaded
         self.config = sf.configUnserialize(dbh.configGet(), self.defaultConfig)
-        
-        # Ensure required keys for opts template are populated
-        if '__modules__' not in self.config:
-            try:
-                import os
-                # Load modules like the legacy version
-                script_dir = os.path.dirname(os.path.abspath(__file__))
-                mod_dir = os.path.join(script_dir, '../../modules')
-                if os.path.exists(mod_dir):
-                    modules = SpiderFootHelpers.loadModulesAsDict(mod_dir, ['sfp_template.py'])
-                    self.config['__modules__'] = modules
-                else:
-                    self.config['__modules__'] = {}
-            except Exception:
-                self.config['__modules__'] = {}
-        
+
+        # Ensure __modules__ is in config after unserialization
+        if '__modules__' not in self.config and '__modules__' in self.defaultConfig:
+            self.config['__modules__'] = self.defaultConfig['__modules__']
+
         if '__globaloptdescs__' not in self.config:
             try:
                 # Load global option descriptions like the legacy version
@@ -1087,8 +1093,21 @@ class WebUiRoutes(SettingsEndpoints, ScanEndpoints, ExportEndpoints, WorkspaceEn
             self.config['__modules__'] = {}
         
         # Validate database configuration
-        if '__database' not in self.config:
-            self.config['__database'] = 'spiderfoot.db'
+        # Note: Database config should come from sf.py which reads environment variables
+        # If it's not set, that's a critical error - don't silently default to SQLite
+        if '__database' not in self.config or not self.config['__database']:
+            # Check if we have a database type to provide better error message
+            db_type = self.config.get('__dbtype', 'unknown')
+            if db_type == 'postgresql':
+                raise ValueError(
+                    "PostgreSQL database type specified but __database connection string is empty. "
+                    "Check that SPIDERFOOT_DB_* environment variables are set correctly."
+                )
+            else:
+                # Fallback to SQLite only if no db type specified
+                from spiderfoot import SpiderFootHelpers
+                self.config['__database'] = f"{SpiderFootHelpers.dataPath()}/spiderfoot.db"
+                self.config['__dbtype'] = 'sqlite'
         
         # Validate other critical configuration keys
         if '__version__' not in self.config:

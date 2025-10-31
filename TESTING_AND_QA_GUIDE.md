@@ -101,7 +101,7 @@ A `sonar-project.properties` file has been created with the following features:
 # Run scan
 sonar-scanner \
   -Dsonar.host.url=http://sonarqube.blking.lan \
-  -Dsonar.login=YOUR_TOKEN_HERE
+  -Dsonar.login=sqp_901b8f8a9aec12adb70a6f70cb8df3ee8be77722
 ```
 
 **Method 2: Using Docker**

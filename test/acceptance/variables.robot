@@ -1,6 +1,6 @@
 *** Variables ***
 ${BROWSER}        Chrome
-${HOST}           127.0.0.1
-${PORT}           5001
-${URL}           http://${HOST}:${PORT}
+${HOST}           number-two-scope.blking.lan
+${PORT}           443
+${URL}           https://${HOST}
 ${TIMEOUT}        5s

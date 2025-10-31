@@ -21,7 +21,12 @@ Setup Chrome Environment
 Create a module scan
     [Arguments]  ${scan_name}  ${scan_target}  ${module_name}
     Setup Chrome Environment
-    Open browser              http://127.0.0.1:5001/newscan    browser=headlesschrome
+    ${chrome_options}=    Evaluate    sys.modules['selenium.webdriver'].ChromeOptions()    sys, selenium.webdriver
+    Call Method    ${chrome_options}    add_argument    --ignore-certificate-errors
+    Call Method    ${chrome_options}    add_argument    --headless
+    Call Method    ${chrome_options}    add_argument    --no-sandbox
+    Call Method    ${chrome_options}    add_argument    --disable-dev-shm-usage
+    Open browser              ${URL}/newscan    browser=chrome    options=${chrome_options}
     Wait Until Element Is Visible    name:scanname    timeout=${WAIT_TIMEOUT}
     Press Keys                name:scanname            ${scan_name}
     Press Keys                name:scantarget          ${scan_target}
@@ -42,7 +47,12 @@ Create a module scan
 Create a use case scan
     [Arguments]  ${scan_name}  ${scan_target}  ${use_case}
     Setup Chrome Environment
-    Open browser              http://127.0.0.1:5001/newscan    browser=headlesschrome
+    ${chrome_options}=    Evaluate    sys.modules['selenium.webdriver'].ChromeOptions()    sys, selenium.webdriver
+    Call Method    ${chrome_options}    add_argument    --ignore-certificate-errors
+    Call Method    ${chrome_options}    add_argument    --headless
+    Call Method    ${chrome_options}    add_argument    --no-sandbox
+    Call Method    ${chrome_options}    add_argument    --disable-dev-shm-usage
+    Open browser              ${URL}/newscan    browser=chrome    options=${chrome_options}
     Wait Until Element Is Visible    name:scanname    timeout=${WAIT_TIMEOUT}
     Press Keys                name:scanname            ${scan_name}
     Press Keys                name:scantarget          ${scan_target}
@@ -156,7 +166,12 @@ Wait For Scan To Finish
 ***Test Cases***
 Main navigation pages should render correctly
     Setup Chrome Environment
-    Open browser              http://127.0.0.1:5001    browser=headlesschrome
+    ${chrome_options}=    Evaluate    sys.modules['selenium.webdriver'].ChromeOptions()    sys, selenium.webdriver
+    Call Method    ${chrome_options}    add_argument    --ignore-certificate-errors
+    Call Method    ${chrome_options}    add_argument    --headless
+    Call Method    ${chrome_options}    add_argument    --no-sandbox
+    Call Method    ${chrome_options}    add_argument    --disable-dev-shm-usage
+    Open browser              ${URL}    browser=chrome    options=${chrome_options}
     Wait Until Element Is Visible    id:nav-link-newscan    timeout=${WAIT_TIMEOUT}
     Click Element                 id:nav-link-newscan
     Wait Until Element Is Visible    id:scanname    timeout=${WAIT_TIMEOUT}

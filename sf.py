@@ -77,6 +77,29 @@ except ImportError:
 scanId = None
 dbh = None
 
+# Read database configuration from environment variables
+# This allows containerized deployments to use PostgreSQL instead of SQLite
+_db_type = os.getenv('SPIDERFOOT_DB_TYPE', 'sqlite').lower()
+if _db_type == 'postgresql':
+    _db_host = os.getenv('SPIDERFOOT_DB_HOST', 'localhost')
+    _db_port = os.getenv('SPIDERFOOT_DB_PORT', '5432')
+    _db_name = os.getenv('SPIDERFOOT_DB', 'spiderfoot_db')
+    _db_user = os.getenv('SPIDERFOOT_DB_USER', 'postgres')
+    _db_pass = os.getenv('SPIDERFOOT_DB_PASSWORD', '')
+
+    # Construct PostgreSQL connection string
+    # Format: postgresql://user:password@host:port/database
+    if _db_pass:
+        _database_config = f"postgresql://{_db_user}:{_db_pass}@{_db_host}:{_db_port}/{_db_name}"
+    else:
+        _database_config = f"postgresql://{_db_user}@{_db_host}:{_db_port}/{_db_name}"
+else:
+    # Default to SQLite with proper path
+    _database_config = os.getenv('SPIDERFOOT_DB_PATH', '')
+    if not _database_config:
+        # Will be set to proper path by SpiderFootHelpers.dataPath() later
+        _database_config = ''
+
 # Legacy configuration for backward compatibility
 sfConfig = {
     '_debug': False,
@@ -89,7 +112,8 @@ sfConfig = {
     '_internettlds': 'https://publicsuffix.org/list/effective_tld_names.dat',
     '_internettlds_cache': 72,
     '_genericusers': '',
-    '__database': '',
+    '__database': _database_config,
+    '__dbtype': _db_type,
     '__modules__': None,
     '__correlationrules__': None,
     '_socks1type': '',
