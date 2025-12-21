@@ -147,11 +147,25 @@ class SpiderFootWebUi(WebUiRoutes):
                         self.config['__modules__'] = {}
             else:
                 self.config['__modules__'] = {}
-            
+
             # Validate database configuration
             if '__database' not in self.config:
-                self.config['__database'] = f"{SpiderFootHelpers.dataPath()}/spiderfoot.db"
-                    
+                # Read from environment variables (for PostgreSQL deployments)
+                db_type = os.getenv('SPIDERFOOT_DB_TYPE', 'sqlite').lower()
+                if db_type == 'postgresql':
+                    db_host = os.getenv('SPIDERFOOT_DB_HOST', 'localhost')
+                    db_port = os.getenv('SPIDERFOOT_DB_PORT', '5432')
+                    db_name = os.getenv('SPIDERFOOT_DB', 'spiderfoot_db')
+                    db_user = os.getenv('SPIDERFOOT_DB_USER', 'postgres')
+                    db_pass = os.getenv('SPIDERFOOT_DB_PASSWORD', '')
+                    # Construct PostgreSQL connection string
+                    if db_pass:
+                        self.config['__database'] = f"host={db_host} port={db_port} dbname={db_name} user={db_user} password={db_pass}"
+                    else:
+                        self.config['__database'] = f"host={db_host} port={db_port} dbname={db_name} user={db_user}"
+                else:
+                    self.config['__database'] = f"{SpiderFootHelpers.dataPath()}/spiderfoot.db"
+
         except Exception as e:
             self.log.error(f"Configuration validation failed: {e}")
             raise
