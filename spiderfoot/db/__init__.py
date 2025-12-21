@@ -14,7 +14,6 @@ from pathlib import Path
 import hashlib
 import random
 import re
-import sqlite3
 import threading
 import time
 import psycopg2
@@ -30,82 +29,11 @@ from spiderfoot.db.db_correlation import CorrelationManager
 def get_schema_queries(db_type):
     """
     Return a list of schema creation queries appropriate for the backend.
+
+    Note: SQLite support has been removed. Only PostgreSQL is supported.
     """
     if db_type == 'sqlite':
-        return [
-            "CREATE TABLE IF NOT EXISTS tbl_schema_version (\n    version INTEGER NOT NULL,\n    applied_at INTEGER NOT NULL\n)",
-            "PRAGMA journal_mode=WAL",
-            "CREATE TABLE IF NOT EXISTS tbl_event_types ( \
-                event       VARCHAR NOT NULL PRIMARY KEY, \
-                event_descr VARCHAR NOT NULL, \
-                event_raw   INT NOT NULL DEFAULT 0, \
-                event_type  VARCHAR NOT NULL \
-            )",
-            "CREATE TABLE IF NOT EXISTS tbl_config ( \
-                scope   VARCHAR NOT NULL, \
-                opt     VARCHAR NOT NULL, \
-                val     VARCHAR NOT NULL, \
-                PRIMARY KEY (scope, opt) \
-            )",
-            "CREATE TABLE IF NOT EXISTS tbl_scan_instance ( \
-                guid        VARCHAR NOT NULL PRIMARY KEY, \
-                name        VARCHAR NOT NULL, \
-                seed_target VARCHAR NOT NULL, \
-                created     INT DEFAULT 0, \
-                started     INT DEFAULT 0, \
-                ended       INT DEFAULT 0, \
-                status      VARCHAR NOT NULL \
-            )",
-            "CREATE TABLE IF NOT EXISTS tbl_scan_log ( \
-                scan_instance_id    VARCHAR NOT NULL REFERENCES tbl_scan_instance(guid), \
-                generated           INT NOT NULL, \
-                component           VARCHAR, \
-                type                VARCHAR NOT NULL, \
-                message             VARCHAR \
-            )",
-            "CREATE TABLE IF NOT EXISTS tbl_scan_config ( \
-                scan_instance_id    VARCHAR NOT NULL REFERENCES tbl_scan_instance(guid), \
-                component           VARCHAR NOT NULL, \
-                opt                 VARCHAR NOT NULL, \
-                val                 VARCHAR NOT NULL, \
-                UNIQUE (scan_instance_id, component, opt) \
-            )",
-            "CREATE TABLE IF NOT EXISTS tbl_scan_results ( \
-                scan_instance_id    VARCHAR NOT NULL REFERENCES tbl_scan_instance(guid), \
-                hash                VARCHAR NOT NULL, \
-                type                VARCHAR NOT NULL REFERENCES tbl_event_types(event), \
-                generated           INT NOT NULL, \
-                confidence          INT NOT NULL DEFAULT 100, \
-                visibility          INT NOT NULL DEFAULT 100, \
-                risk                INT NOT NULL DEFAULT 0, \
-                module              VARCHAR NOT NULL, \
-                data                TEXT, \
-                false_positive      INT NOT NULL DEFAULT 0, \
-                source_event_hash  VARCHAR DEFAULT 'ROOT' \
-            )",
-            "CREATE TABLE IF NOT EXISTS tbl_scan_correlation_results ( \
-                id                  VARCHAR NOT NULL PRIMARY KEY, \
-                scan_instance_id    VARCHAR NOT NULL REFERENCES tbl_scan_instance(guid), \
-                title               VARCHAR NOT NULL, \
-                rule_risk           VARCHAR NOT NULL, \
-                rule_id             VARCHAR NOT NULL, \
-                rule_name           VARCHAR NOT NULL, \
-                rule_descr          VARCHAR NOT NULL, \
-                rule_logic          VARCHAR NOT NULL \
-            )",
-            "CREATE TABLE IF NOT EXISTS tbl_scan_correlation_results_events ( \
-                correlation_id      VARCHAR NOT NULL REFERENCES tbl_scan_correlation_results(id), \
-                event_hash          VARCHAR NOT NULL \
-            )",
-            "CREATE INDEX IF NOT EXISTS idx_scan_results_id ON tbl_scan_results (scan_instance_id)",
-            "CREATE INDEX IF NOT EXISTS idx_scan_results_type ON tbl_scan_results (scan_instance_id, type)",
-            "CREATE INDEX IF NOT EXISTS idx_scan_results_hash ON tbl_scan_results (scan_instance_id, hash)",
-            "CREATE INDEX IF NOT EXISTS idx_scan_results_module ON tbl_scan_results(scan_instance_id, module)",
-            "CREATE INDEX IF NOT EXISTS idx_scan_results_srchash ON tbl_scan_results (scan_instance_id, source_event_hash)",
-            "CREATE INDEX IF NOT EXISTS idx_scan_logs ON tbl_scan_log (scan_instance_id)",
-            "CREATE INDEX IF NOT EXISTS idx_scan_correlation ON tbl_scan_correlation_results (scan_instance_id, id)",
-            "CREATE INDEX IF NOT EXISTS idx_scan_correlation_events ON tbl_scan_correlation_results_events (correlation_id)"
-        ]
+        raise ValueError("SQLite is not supported. Please use PostgreSQL by setting SPIDERFOOT_DB_TYPE=postgresql")
     elif db_type == 'postgresql':
         return [
             "CREATE TABLE IF NOT EXISTS tbl_event_types ( \
@@ -428,69 +356,9 @@ class SpiderFootDb:
             raise ValueError("opts is empty")
         if not opts.get('__database'):
             raise ValueError("opts['__database'] is empty")
-        # ...existing code for sqlite/postgresql init...
+        # SQLite support has been removed - only PostgreSQL is supported
         if self.db_type == 'sqlite':
-            database_path = opts['__database']
-            Path(database_path).parent.mkdir(exist_ok=True, parents=True)
-            try:
-                dbh = sqlite3.connect(database_path)
-            except Exception as e:
-                raise IOError(
-                    f"Error connecting to internal database {database_path}") from e
-            if dbh is None:
-                raise IOError(
-                    f"Could not connect to internal database, and could not create {database_path}") from None
-            dbh.text_factory = str
-            self.conn = dbh
-            self.dbh = dbh.cursor()
-            def __dbregex__(qry: str, data: str) -> bool:
-                try:
-                    rx = re.compile(qry, re.IGNORECASE | re.DOTALL)
-                    ret = rx.match(data)
-                except Exception:
-                    return False
-                return ret is not None
-            with self.dbhLock:
-                try:
-                    self.dbh.execute('SELECT COUNT(*) FROM tbl_scan_config')
-                    self.conn.create_function("REGEXP", 2, __dbregex__)
-                except sqlite3.Error:
-                    init = True
-                    try:
-                        for query in get_schema_queries(self.db_type):
-                            self.dbh.execute(query)
-                        self.conn.commit()
-                    except Exception as e:
-                        raise IOError(
-                            "Tried to set up the SpiderFoot database schema, but failed") from e
-                try:
-                    self.dbh.execute(
-                        "SELECT COUNT(*) FROM tbl_scan_correlation_results")
-                except sqlite3.Error:
-                    try:
-                        for query in get_schema_queries(self.db_type):
-                            if "correlation" in query:
-                                self.dbh.execute(query)
-                        self.conn.commit()
-                    except sqlite3.Error:
-                        raise IOError("Looks like you are running a pre-4.0 database. Unfortunately "
-                                      "SpiderFoot wasn't able to migrate you, so you'll need to delete "
-                                      "your SpiderFoot database in order to proceed.") from None
-                if init:
-                    for row in self.eventDetails:
-                        event = row[0]
-                        event_descr = row[1]
-                        event_raw = row[2]
-                        event_type = row[3]
-                        qry = "INSERT INTO tbl_event_types (event, event_descr, event_raw, event_type) VALUES (?, ?, ?, ?)"
-                        try:
-                            self.dbh.execute(qry, (
-                                event, event_descr, event_raw, event_type
-                            ))
-                            self.conn.commit()
-                        except Exception:
-                            continue
-                    self.conn.commit()
+            raise ValueError("SQLite is not supported. Please use PostgreSQL by setting SPIDERFOOT_DB_TYPE=postgresql")
         elif self.db_type == 'postgresql':
             try:
                 self.conn = psycopg2.connect(opts['__database'])
@@ -533,11 +401,13 @@ class SpiderFootDb:
     def connect(self):
         """
         Connect to the database using the provided parameters.
+
+        Note: SQLite support has been removed. Only PostgreSQL is supported.
         """
         try:
             if self.dbtype == "sqlite":
-                self.conn = sqlite3.connect(self.dbname)
-            elif self.dbtype == "postgres":
+                raise ValueError("SQLite is not supported. Please use PostgreSQL by setting SPIDERFOOT_DB_TYPE=postgresql")
+            elif self.dbtype in ("postgres", "postgresql"):
                 self.conn = psycopg2.connect(
                     host=self.dbhost,
                     port=self.dbport,

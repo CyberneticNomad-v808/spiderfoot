@@ -1,11 +1,20 @@
 # -*- coding: utf-8 -*-
-"""Database fixtures for testing SpiderFoot database operations."""
+"""Database fixtures for testing SpiderFoot database operations.
+
+Note: SQLite support has been removed. All tests use PostgreSQL mocking.
+"""
 
 import pytest
 import tempfile
 import os
-import sqlite3
 from unittest.mock import Mock, MagicMock, patch
+
+# Import psycopg2 for PostgreSQL error types
+try:
+    import psycopg2
+except ImportError:
+    psycopg2 = None
+
 from spiderfoot import SpiderFootDb
 from spiderfoot.event import SpiderFootEvent
 
@@ -35,19 +44,38 @@ def temp_db_path():
 
 @pytest.fixture
 def mock_db_config():
-    """Mock database configuration."""
+    """Mock database configuration for PostgreSQL."""
     return {
-        '__database': ':memory:',
-        '__dbtype': 'sqlite',
+        '__database': 'postgresql://test:test@localhost:5432/spiderfoot_test',
+        '__dbtype': 'postgresql',
     }
 
 
 @pytest.fixture
-def in_memory_db():
-    """Create an in-memory SQLite database for testing."""
-    conn = sqlite3.connect(':memory:')
-    yield conn
-    conn.close()
+def mock_pg_connection():
+    """Create a mock PostgreSQL connection for testing.
+
+    Note: SQLite in-memory DB has been removed. Use this mock instead.
+    """
+    mock_conn = MagicMock()
+    mock_cursor = MagicMock()
+
+    # Set up cursor behavior
+    mock_cursor.execute = MagicMock()
+    mock_cursor.fetchone = MagicMock(return_value=None)
+    mock_cursor.fetchall = MagicMock(return_value=[])
+    mock_cursor.fetchmany = MagicMock(return_value=[])
+    mock_cursor.description = None
+    mock_cursor.rowcount = 0
+
+    # Set up connection behavior
+    mock_conn.cursor = MagicMock(return_value=mock_cursor)
+    mock_conn.commit = MagicMock()
+    mock_conn.rollback = MagicMock()
+    mock_conn.close = MagicMock()
+    mock_conn.closed = False
+
+    yield mock_conn
 
 
 @pytest.fixture
@@ -181,45 +209,68 @@ def sample_scan_log():
 
 @pytest.fixture
 def database_error_scenarios():
-    """Common database error scenarios for testing."""
-    return {
-        'connection_error': sqlite3.OperationalError("database is locked"),
-        'syntax_error': sqlite3.OperationalError("near 'FROM': syntax error"),
-        'integrity_error': sqlite3.IntegrityError("UNIQUE constraint failed"),
-        'data_error': sqlite3.DataError("Invalid data type"),
-        'database_error': sqlite3.DatabaseError("Database corrupted")
-    }
+    """Common database error scenarios for testing (PostgreSQL).
+
+    Note: SQLite errors have been removed. Using psycopg2 error types.
+    """
+    if psycopg2:
+        return {
+            'connection_error': psycopg2.OperationalError("connection refused"),
+            'syntax_error': psycopg2.ProgrammingError("syntax error at or near"),
+            'integrity_error': psycopg2.IntegrityError("duplicate key value violates unique constraint"),
+            'data_error': psycopg2.DataError("invalid input syntax"),
+            'database_error': psycopg2.DatabaseError("database connection failed")
+        }
+    else:
+        # Fallback for environments without psycopg2 installed
+        return {
+            'connection_error': Exception("connection refused"),
+            'syntax_error': Exception("syntax error"),
+            'integrity_error': Exception("integrity error"),
+            'data_error': Exception("data error"),
+            'database_error': Exception("database error")
+        }
 
 
 class MockSpiderFootDb:
-    """Mock SpiderFootDb class for testing."""
-    
+    """Mock SpiderFootDb class for testing.
+
+    Note: Uses psycopg2 error types (SQLite has been removed).
+    """
+
     def __init__(self, config=None):
         self.config = config or {}
         self.dbh = Mock()
         self.connection_error = False
-        
+
+    def _raise_connection_error(self):
+        """Raise appropriate connection error."""
+        if psycopg2:
+            raise psycopg2.OperationalError("connection refused")
+        else:
+            raise IOError("Connection failed")
+
     def configGet(self, opt, default=None):
         return self.config.get(opt, default)
-        
+
     def scanInstanceCreate(self, scanId, scanName, scanTarget):
         if self.connection_error:
-            raise sqlite3.OperationalError("Connection failed")
+            self._raise_connection_error()
         return True
-        
+
     def scanEventStore(self, scanId, sfEvent):
         if self.connection_error:
-            raise sqlite3.OperationalError("Connection failed")
+            self._raise_connection_error()
         return True
-        
+
     def scanResultEvent(self, instanceId, eventType=None, filterFp=None):
         if self.connection_error:
-            raise sqlite3.OperationalError("Connection failed")
+            self._raise_connection_error()
         return []
-        
+
     def scanInstanceGet(self, instanceId):
         if self.connection_error:
-            raise sqlite3.OperationalError("Connection failed")
+            self._raise_connection_error()
         return None
 
 

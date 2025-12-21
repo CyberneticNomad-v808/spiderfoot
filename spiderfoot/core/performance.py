@@ -19,7 +19,6 @@ from typing import Dict, Any, Callable, Optional, Union
 from functools import wraps, lru_cache
 from collections import defaultdict, deque
 from datetime import datetime, timedelta
-import sqlite3
 import redis
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import multiprocessing
@@ -228,26 +227,34 @@ class CacheManager:
 
 
 class DatabaseOptimizer:
-    """Database performance optimization."""
-    
+    """Database performance optimization.
+
+    Note: This class was designed for SQLite which is no longer supported.
+    For PostgreSQL, use psycopg2's connection pooling or a dedicated pool like pgbouncer.
+    """
+
     def __init__(self, db_path: str):
         self.db_path = db_path
         self.connection_pool = []
         self.pool_lock = threading.Lock()
         self.max_connections = 10
-        
+        # Warn that this class is deprecated for PostgreSQL
+        import warnings
+        warnings.warn(
+            "DatabaseOptimizer is designed for SQLite and is not recommended for PostgreSQL. "
+            "Consider using psycopg2's connection pooling instead.",
+            DeprecationWarning
+        )
+
     def get_connection(self):
-        """Get database connection from pool."""
-        with self.pool_lock:
-            if self.connection_pool:
-                return self.connection_pool.pop()
-            else:
-                conn = sqlite3.connect(self.db_path, check_same_thread=False)
-                conn.execute("PRAGMA journal_mode=WAL")
-                conn.execute("PRAGMA synchronous=NORMAL")
-                conn.execute("PRAGMA cache_size=10000")
-                conn.execute("PRAGMA temp_store=MEMORY")
-                return conn
+        """Get database connection from pool.
+
+        Note: SQLite is no longer supported. This method will raise an error.
+        """
+        raise NotImplementedError(
+            "DatabaseOptimizer.get_connection() is not supported. "
+            "SQLite has been removed. Use PostgreSQL with psycopg2 instead."
+        )
     
     def return_connection(self, conn):
         """Return connection to pool."""

@@ -13,7 +13,6 @@
 Core DB connection, locking, schema management, and shared resources for SpiderFootDb.
 """
 import threading
-import sqlite3
 import psycopg2
 from pathlib import Path
 import time
@@ -730,53 +729,12 @@ class DbCore:
         if '__database' not in opts:
             raise ValueError("__database key missing in opts")
         if '__dbtype' not in opts:
-            opts['__dbtype'] = 'sqlite'
+            opts['__dbtype'] = 'postgresql'  # Default to PostgreSQL (SQLite no longer supported)
         self.db_type = normalize_db_type(opts['__dbtype'])
         database_path = opts['__database']
+        # SQLite support has been removed - only PostgreSQL is supported
         if self.db_type == 'sqlite':
-            Path(database_path).parent.mkdir(exist_ok=True, parents=True)
-            try:
-                dbh = sqlite3.connect(database_path)
-            except Exception as e:
-                self._log_db_error(f"Error connecting to internal database {database_path}", e)
-                raise IOError(f"Error connecting to internal database {database_path}") from e
-            if dbh is None:
-                raise IOError(f"Could not connect to internal database, and could not create {database_path}")
-            dbh.text_factory = str
-            self.conn = dbh
-            self.dbh = dbh.cursor()
-            def __dbregex__(qry: str, data: str) -> bool:
-                import re
-                return re.search(qry, data) is not None
-            self.conn.create_function("REGEXP", 2, __dbregex__)
-            with self.dbhLock:
-                try:
-                    self.create()
-                except Exception as e:
-                    self._log_db_error("Tried to set up the SpiderFoot database schema, but failed", e)
-                    raise IOError("Tried to set up the SpiderFoot database schema, but failed") from e
-                try:
-                    self.dbh.execute("SELECT COUNT(*) FROM tbl_event_types")
-                    if self.dbh.fetchone()[0] == 0:
-                        for row in self.eventDetails:
-                            event = row[0]
-                            event_descr = row[1]
-                            event_raw = row[2]
-                            event_type = row[3]
-                            ph = get_placeholder(self.db_type)
-                            upsert_clause = get_upsert_clause(self.db_type, 'tbl_event_types', ['event'], ['event_descr', 'event_raw', 'event_type'])
-                            qry = f"INSERT INTO tbl_event_types (event, event_descr, event_raw, event_type) VALUES ({ph}, {ph}, {ph}, {ph}) {upsert_clause}"
-                            try:
-                                self.dbh.execute(qry, (
-                                    event, event_descr, event_raw, event_type
-                                ))
-                            except Exception as e:
-                                self._log_db_error("Failed to insert event type", e)
-                                continue
-                        self.conn.commit()
-                except Exception as e:
-                    self._log_db_error("Failed to populate event types", e)
-                    raise IOError("Failed to populate event types") from e
+            raise ValueError("SQLite is not supported. Please use PostgreSQL by setting SPIDERFOOT_DB_TYPE=postgresql")
         elif self.db_type == 'postgresql':
             try:
                 import psycopg2.extras
@@ -880,7 +838,7 @@ class DbCore:
                                 continue
                         self.conn.commit()
                     return
-                except (sqlite3.Error, psycopg2.Error) as e:
+                except (psycopg2.Error) as e:
                     self._log_db_error("SQL error encountered when setting up database", e)
                     if is_transient_error(e) and attempt < 2:
                         time.sleep(0.2 * (attempt + 1))
@@ -918,7 +876,7 @@ class DbCore:
                         self.dbh.execute("VACUUM")
                     self.conn.commit()
                     return True
-                except (sqlite3.Error, psycopg2.Error) as e:
+                except (psycopg2.Error) as e:
                     self._log_db_error("SQL error encountered when vacuuming the database", e)
                     if is_transient_error(e) and attempt < 2:
                         time.sleep(0.2 * (attempt + 1))
@@ -940,5 +898,5 @@ class DbCore:
             try:
                 self.dbh.execute(qry)
                 return self.dbh.fetchall()
-            except (sqlite3.Error, psycopg2.Error) as e:
+            except (psycopg2.Error) as e:
                 raise IOError("SQL error encountered when retrieving event types") from e

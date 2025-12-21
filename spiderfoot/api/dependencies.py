@@ -1,6 +1,7 @@
 """
 Dependencies and helpers for SpiderFoot API
 """
+import os
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from spiderfoot.db import SpiderFootDb
@@ -15,6 +16,14 @@ security = HTTPBearer(auto_error=False)
 class Config:
     def __init__(self):
         from spiderfoot import __version__
+        # PostgreSQL database configuration via environment variables
+        db_host = os.environ.get('SPIDERFOOT_DB_HOST', 'localhost')
+        db_port = os.environ.get('SPIDERFOOT_DB_PORT', '5432')
+        db_name = os.environ.get('SPIDERFOOT_DB_NAME', 'spiderfoot')
+        db_user = os.environ.get('SPIDERFOOT_DB_USER', 'spiderfoot')
+        db_pass = os.environ.get('SPIDERFOOT_DB_PASS', 'spiderfoot')
+        default_dsn = f"postgresql://{db_user}:{db_pass}@{db_host}:{db_port}/{db_name}"
+
         default_config = {
             '__modules__': {},
             '__correlationrules__': [],
@@ -22,7 +31,8 @@ class Config:
             '__webaddr': '127.0.0.1',
             '__webport': '8001',
             '__webaddr_apikey': None,
-            '__database': f"{SpiderFootHelpers.dataPath()}/spiderfoot.db",
+            '__database': os.environ.get('SPIDERFOOT_DATABASE', default_dsn),
+            '__dbtype': os.environ.get('SPIDERFOOT_DB_TYPE', 'postgresql'),
             '__loglevel': 'INFO',
             '__logfile': '',
             '__version__': __version__,
@@ -116,7 +126,14 @@ app_config = None
 
 
 def get_app_config():
+    """Get the application configuration singleton.
+
+    Returns None if TESTING_MODE environment variable is set to '1',
+    allowing tests to mock the configuration without database initialization.
+    """
     global app_config
+    if os.environ.get('TESTING_MODE') == '1':
+        return None
     if app_config is None:
         app_config = Config()
     return app_config

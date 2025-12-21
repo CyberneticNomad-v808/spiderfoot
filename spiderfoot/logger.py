@@ -1,7 +1,6 @@
 import atexit
 import logging
 import os
-import sqlite3
 import sys
 import time
 from contextlib import suppress

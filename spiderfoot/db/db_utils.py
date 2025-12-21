@@ -47,24 +47,37 @@ def get_upsert_clause(db_type, table, conflict_cols, update_cols):
     raise ValueError(f"Unsupported db_type: {db_type}")
 
 def is_transient_error(exc):
-    """Classify if an exception is a transient DB error."""
-    import sqlite3
+    """Classify if an exception is a transient DB error.
+
+    Note: SQLite support has been removed. Only PostgreSQL errors are checked.
+    """
     try:
         import psycopg2
     except ImportError:
         psycopg2 = None
-    # SQLite transient errors
-    if isinstance(exc, sqlite3.OperationalError):
+
+    if not psycopg2:
+        return False
+
+    # PostgreSQL transient errors (connection issues, temporary failures)
+    if isinstance(exc, psycopg2.OperationalError):
         msg = str(exc).lower()
-        if 'database is locked' in msg or 'database is busy' in msg or 'unable to open database file' in msg:
-            return True
-    # PostgreSQL transient errors
-    if psycopg2 and isinstance(exc, psycopg2.OperationalError):
-        return True
-    if psycopg2 and isinstance(exc, psycopg2.DatabaseError):
+        transient_patterns = [
+            'could not connect',
+            'connection refused',
+            'server closed the connection',
+            'connection timed out',
+            'terminating connection',
+            'connection reset',
+            'ssl connection has been closed',
+        ]
+        return any(pattern in msg for pattern in transient_patterns)
+
+    if isinstance(exc, psycopg2.InterfaceError):
         msg = str(exc).lower()
-        if 'could not connect' in msg or 'connection refused' in msg or 'server closed the connection' in msg:
+        if 'connection already closed' in msg or 'cursor already closed' in msg:
             return True
+
     return False
 
 def check_connection(conn, db_type):

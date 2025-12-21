@@ -149,7 +149,9 @@ def default_options(request):
             '_internettlds': 'https://publicsuffix.org/list/effective_tld_names.dat',
             '_internettlds_cache': 72,
             '_genericusers': ",".join(SpiderFootHelpers.usernamesFromWordlists(['generic-usernames'])),
-            '__database': f"{SpiderFootHelpers.dataPath()}/spiderfoot.test.db",
+            # PostgreSQL-only: use DSN format (tests should mock DB connections)
+            '__database': 'postgresql://test:test@localhost:5432/spiderfoot_test',
+            '__dbtype': 'postgresql',
             '__modules__': None,
             '__correlationrules__': None,
             '_socks1type': '',
