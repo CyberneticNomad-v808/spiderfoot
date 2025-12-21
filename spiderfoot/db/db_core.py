@@ -825,6 +825,7 @@ class DbCore:
                 row = self.dbh.fetchone()
                 return int(row[0]) if row else 0
             except Exception:
+                self.conn.rollback()
                 return 0
 
     def set_schema_version(self, version=None):
@@ -857,6 +858,10 @@ class DbCore:
                     from spiderfoot.db.__init__ import get_schema_queries
                     for qry in get_schema_queries(self.db_type):
                         self.dbh.execute(qry)
+                    self.conn.commit()
+                    # Create schema version table if it doesn't exist
+                    schema_version_queries = get_schema_version_queries(self.db_type)
+                    self.dbh.execute(schema_version_queries['create'])
                     self.conn.commit()
                     if self.get_schema_version() < self.SCHEMA_VERSION:
                         self.set_schema_version(self.SCHEMA_VERSION)
