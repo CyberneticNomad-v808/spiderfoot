@@ -79,6 +79,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
 
+# Remove SQLite3 to force PostgreSQL-only usage
+RUN rm -rf /usr/local/lib/python3.11/sqlite3 \
+    /usr/local/lib/python3.11/lib-dynload/_sqlite3*.so \
+    /usr/lib/python3.*/sqlite3 \
+    /usr/lib/python3.*/lib-dynload/_sqlite3*.so 2>/dev/null || true
+
 # Copy virtual environment from builder
 COPY --from=builder /opt/venv /opt/venv
 
