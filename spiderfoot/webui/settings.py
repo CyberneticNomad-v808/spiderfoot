@@ -59,10 +59,11 @@ class SettingsEndpoints:
                     if '=' in line:
                         k, v = line.split('=', 1)
                         new_config[k.strip()] = v.strip()
-                dbh = SpiderFootDb(self.config)
+                # Config files already have string values, save directly
+                dbh = SpiderFootDb(self.defaultConfig)
                 dbh.configSet(new_config)
                 sf = SpiderFoot(self.defaultConfig)
-                self.config = sf.configUnserialize(new_config, self.defaultConfig)
+                self.config = sf.configUnserialize(dbh.configGet(), self.defaultConfig)
             except Exception as e:
                 from sfwebui import Template
                 templ = Template(filename='spiderfoot/templates/opts.tmpl', lookup=self.lookup)
@@ -83,10 +84,14 @@ class SettingsEndpoints:
             try:
                 # allopts is JSON string from the form
                 new_config = json.loads(allopts)
-                dbh = SpiderFootDb(self.config)
+                # Convert booleans to "1"/"0" strings for database
+                for key in new_config:
+                    if isinstance(new_config[key], bool):
+                        new_config[key] = "1" if new_config[key] else "0"
+                dbh = SpiderFootDb(self.defaultConfig)
                 dbh.configSet(new_config)
                 sf = SpiderFoot(self.defaultConfig)
-                self.config = sf.configUnserialize(new_config, self.defaultConfig)
+                self.config = sf.configUnserialize(dbh.configGet(), self.defaultConfig)
             except Exception as e:
                 from sfwebui import Template
                 templ = Template(filename='spiderfoot/templates/opts.tmpl', lookup=self.lookup)
@@ -117,10 +122,14 @@ class SettingsEndpoints:
             try:
                 # allopts is JSON string
                 new_config = json.loads(allopts)
-                dbh = SpiderFootDb(self.config)
+                # Convert booleans to "1"/"0" strings for database
+                for key in new_config:
+                    if isinstance(new_config[key], bool):
+                        new_config[key] = "1" if new_config[key] else "0"
+                dbh = SpiderFootDb(self.defaultConfig)
                 dbh.configSet(new_config)
                 sf = SpiderFoot(self.defaultConfig)
-                self.config = sf.configUnserialize(new_config, self.defaultConfig)
+                self.config = sf.configUnserialize(dbh.configGet(), self.defaultConfig)
             except Exception as e:
                 return json.dumps(["ERROR", str(e)]).encode('utf-8')
         return json.dumps(["SUCCESS", ""]).encode('utf-8')
@@ -128,7 +137,7 @@ class SettingsEndpoints:
     def reset_settings(self):
         try:
             from spiderfoot import SpiderFootDb
-            dbh = SpiderFootDb(self.config)
+            dbh = SpiderFootDb(self.defaultConfig)
             dbh.configClear()  # Clear it in the DB
             self.config = self.defaultConfig.copy()  # Clear in memory
         except Exception:

@@ -167,7 +167,9 @@ class DbCore:
         )",
         "CREATE TABLE IF NOT EXISTS tbl_scan_correlation_results_events ( \
             correlation_id      VARCHAR NOT NULL REFERENCES tbl_scan_correlation_results(id), \
-            event_hash          VARCHAR NOT NULL REFERENCES tbl_scan_results(hash) \
+            scan_instance_id    VARCHAR NOT NULL, \
+            event_hash          VARCHAR NOT NULL, \
+            FOREIGN KEY (scan_instance_id, event_hash) REFERENCES tbl_scan_results(scan_instance_id, hash) \
         )",
         "CREATE INDEX IF NOT EXISTS idx_scan_results_id ON tbl_scan_results (scan_instance_id)",
         "CREATE INDEX IF NOT EXISTS idx_scan_results_type ON tbl_scan_results (scan_instance_id, type)",

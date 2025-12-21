@@ -95,7 +95,7 @@ def get_schema_queries(db_type):
             )",
             "CREATE TABLE IF NOT EXISTS tbl_scan_correlation_results_events ( \
                 correlation_id      VARCHAR NOT NULL REFERENCES tbl_scan_correlation_results(id), \
-                event_hash          VARCHAR NOT NULL REFERENCES tbl_scan_results(hash) \
+                event_hash          VARCHAR NOT NULL \
             )",
             "CREATE INDEX IF NOT EXISTS idx_scan_results_id ON tbl_scan_results (scan_instance_id)",
             "CREATE INDEX IF NOT EXISTS idx_scan_results_type ON tbl_scan_results (scan_instance_id, type)",
@@ -168,7 +168,7 @@ def get_schema_queries(db_type):
             )",
             "CREATE TABLE IF NOT EXISTS tbl_scan_correlation_results_events ( \
                 correlation_id      VARCHAR NOT NULL REFERENCES tbl_scan_correlation_results(id), \
-                event_hash          VARCHAR NOT NULL REFERENCES tbl_scan_results(hash) \
+                event_hash          VARCHAR NOT NULL \
             )",
             "CREATE INDEX IF NOT EXISTS idx_scan_results_id ON tbl_scan_results (scan_instance_id)",
             "CREATE INDEX IF NOT EXISTS idx_scan_results_type ON tbl_scan_results (scan_instance_id, type)",
@@ -503,6 +503,7 @@ class SpiderFootDb:
                 try:
                     self.dbh.execute('SELECT COUNT(*) FROM tbl_scan_config')
                 except psycopg2.Error:
+                    self.conn.rollback()
                     init = True
                     try:
                         for query in get_schema_queries(self.db_type):

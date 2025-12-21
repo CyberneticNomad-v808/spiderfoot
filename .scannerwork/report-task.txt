@@ -1,0 +1,6 @@
+projectKey=number-two-scope
+serverUrl=https://sonarqube.blking.lan
+serverVersion=25.10.0.114319
+dashboardUrl=https://sonarqube.blking.lan/dashboard?id=number-two-scope
+ceTaskId=f5eca9ec-b51f-4eea-b93a-ab182b8ffc13
+ceTaskUrl=https://sonarqube.blking.lan/api/ce/task?id=f5eca9ec-b51f-4eea-b93a-ab182b8ffc13

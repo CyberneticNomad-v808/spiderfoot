@@ -122,7 +122,7 @@ class SpiderFootWebUi(WebUiRoutes):
                 '__version__': '5.3.3',         # Default version if not set
                 '_debug': False,                # Default debug mode off
                 '__correlationrules__': [],     # Default empty correlation rules
-                '__dbtype': 'sqlite'            # Default database type
+                '__dbtype': os.getenv('SPIDERFOOT_DB_TYPE', 'sqlite').lower()
             }
             
             for key, default_value in required_defaults.items():

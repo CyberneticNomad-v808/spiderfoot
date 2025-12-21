@@ -26,7 +26,7 @@ RULE_SCHEMA = {
             },
             "required": ["name", "description", "risk"]
         },
-        "collections": {"type": "object"},
+        "collections": {"type": "array"},
         "headline": {"type": "string"},
         "enabled": {"type": "boolean"},
         "id": {"type": "string"},

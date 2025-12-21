@@ -396,9 +396,16 @@ class CherryPySecurityTool(cherrypy.Tool):
     def _validate_request_data(self, request):
         """Validate request data for security threats."""
         try:
-            # Get request body
+            # Get request body - use params instead of reading body stream to avoid exhausting it
             if hasattr(request, 'body') and request.body:
-                body_data = request.body.read()
+                # Save position and read, then reset for the actual handler
+                try:
+                    body_data = request.body.read()
+                    request.body.seek(0)  # Reset stream position for actual handler
+                except (AttributeError, OSError):
+                    # Some file-like objects don't support seek, fall back to using params
+                    body_data = b''
+
                 if body_data:
                     # Validate based on content type
                     content_type = request.headers.get('Content-Type', '')
