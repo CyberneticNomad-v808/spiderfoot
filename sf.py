@@ -78,27 +78,35 @@ scanId = None
 dbh = None
 
 # Read database configuration from environment variables
-# This allows containerized deployments to use PostgreSQL instead of SQLite
-_db_type = os.getenv('SPIDERFOOT_DB_TYPE', 'sqlite').lower()
-if _db_type == 'postgresql':
-    _db_host = os.getenv('SPIDERFOOT_DB_HOST', 'localhost')
-    _db_port = os.getenv('SPIDERFOOT_DB_PORT', '5432')
-    _db_name = os.getenv('SPIDERFOOT_DB', 'spiderfoot_db')
-    _db_user = os.getenv('SPIDERFOOT_DB_USER', 'postgres')
-    _db_pass = os.getenv('SPIDERFOOT_DB_PASSWORD', '')
-
-    # Construct PostgreSQL connection string
-    # Format: postgresql://user:password@host:port/database
-    if _db_pass:
-        _database_config = f"postgresql://{_db_user}:{_db_pass}@{_db_host}:{_db_port}/{_db_name}"
-    else:
-        _database_config = f"postgresql://{_db_user}@{_db_host}:{_db_port}/{_db_name}"
-else:
-    # Default to SQLite with proper path
-    _database_config = os.getenv('SPIDERFOOT_DB_PATH', '')
-    if not _database_config:
-        # Will be set to proper path by SpiderFootHelpers.dataPath() later
-        _database_config = ''
+# PostgreSQL is required - SQLite is no longer supported
+try:
+    from spiderfoot.db.db_config_builder import build_database_config
+    _db_config = build_database_config()
+    _database_config = _db_config['__database']
+    _db_type = _db_config['__dbtype']
+except ValueError as e:
+    # Provide clear error message for missing or invalid configuration
+    print(f"ERROR: Database configuration failed: {e}", file=sys.stderr)
+    print("\nSpiderFoot requires PostgreSQL. SQLite is no longer supported.", file=sys.stderr)
+    print("\nRequired environment variables:", file=sys.stderr)
+    print("  SPIDERFOOT_DB_NAME or SPIDERFOOT_DB=your_database (REQUIRED)", file=sys.stderr)
+    print("\nOptional environment variables (with defaults):", file=sys.stderr)
+    print("  SPIDERFOOT_DB_TYPE=postgresql (default)", file=sys.stderr)
+    print("  SPIDERFOOT_DB_HOST=localhost (default)", file=sys.stderr)
+    print("  SPIDERFOOT_DB_PORT=5432 (default)", file=sys.stderr)
+    print("  SPIDERFOOT_DB_USER=spiderfoot (default)", file=sys.stderr)
+    print("  SPIDERFOOT_DB_PASSWORD=your_password (recommended)", file=sys.stderr)
+    print("\nExample:", file=sys.stderr)
+    print("  export SPIDERFOOT_DB_NAME=spiderfoot_db", file=sys.stderr)
+    print("  export SPIDERFOOT_DB_PASSWORD=your_secure_password", file=sys.stderr)
+    print("\nFor more information, see docs/POSTGRESQL_SETUP.md", file=sys.stderr)
+    sys.exit(1)
+except ImportError as e:
+    # Fallback for development/testing when module structure is not yet set up
+    print(f"ERROR: Failed to import db_config_builder: {e}", file=sys.stderr)
+    print("Using fallback configuration.", file=sys.stderr)
+    _database_config = ''
+    _db_type = 'postgresql'
 
 # Legacy configuration for backward compatibility
 sfConfig = {

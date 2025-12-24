@@ -736,13 +736,50 @@ class DbCore:
         if self.db_type == 'sqlite':
             raise ValueError("SQLite is not supported. Please use PostgreSQL by setting SPIDERFOOT_DB_TYPE=postgresql")
         elif self.db_type == 'postgresql':
+            # Validate DSN URI format before attempting connection
+            if not database_path or not database_path.startswith('postgresql://'):
+                raise ValueError(
+                    f"Invalid PostgreSQL connection string: '{database_path}'\n"
+                    "Expected DSN URI format: postgresql://user:password@host:port/database\n"
+                    "\n"
+                    "This error usually means database environment variables are not set correctly.\n"
+                    "Required: SPIDERFOOT_DB_NAME or SPIDERFOOT_DB\n"
+                    "See docs/POSTGRESQL_SETUP.md for configuration help."
+                )
+
             try:
                 import psycopg2.extras
+                import psycopg2
                 self.conn = psycopg2.connect(database_path)
                 self.dbh = self.conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
+            except psycopg2.OperationalError as e:
+                # Specific error for connection failures (wrong host, credentials, etc.)
+                self._log_db_error("Cannot connect to PostgreSQL database", e)
+                # Sanitize DSN for error message (hide password)
+                safe_dsn = database_path.split('@')[-1] if '@' in database_path else database_path
+                raise IOError(
+                    f"PostgreSQL connection failed: {e}\n"
+                    f"Connection target: {safe_dsn}\n"
+                    "\n"
+                    "Troubleshooting steps:\n"
+                    "  1. Check PostgreSQL server is running\n"
+                    "  2. Verify database exists\n"
+                    "  3. Check credentials are correct\n"
+                    "  4. Verify network access (firewall, pg_hba.conf)\n"
+                    "\n"
+                    "Environment variables:\n"
+                    "  SPIDERFOOT_DB_HOST (default: localhost)\n"
+                    "  SPIDERFOOT_DB_PORT (default: 5432)\n"
+                    "  SPIDERFOOT_DB_NAME or SPIDERFOOT_DB (REQUIRED)\n"
+                    "  SPIDERFOOT_DB_USER (default: spiderfoot)\n"
+                    "  SPIDERFOOT_DB_PASSWORD (recommended)\n"
+                    "\n"
+                    "See docs/POSTGRESQL_SETUP.md for detailed setup instructions."
+                ) from e
             except Exception as e:
+                # Generic error for other issues
                 self._log_db_error(f"Error connecting to PostgreSQL database {database_path}", e)
-                raise IOError(f"Error connecting to PostgreSQL database {database_path}") from e
+                raise IOError(f"Error connecting to PostgreSQL database: {e}") from e
             with self.dbhLock:
                 try:
                     self.create()

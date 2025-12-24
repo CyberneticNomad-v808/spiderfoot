@@ -16,13 +16,20 @@ security = HTTPBearer(auto_error=False)
 class Config:
     def __init__(self):
         from spiderfoot import __version__
-        # PostgreSQL database configuration via environment variables
-        db_host = os.environ.get('SPIDERFOOT_DB_HOST', 'localhost')
-        db_port = os.environ.get('SPIDERFOOT_DB_PORT', '5432')
-        db_name = os.environ.get('SPIDERFOOT_DB_NAME', 'spiderfoot')
-        db_user = os.environ.get('SPIDERFOOT_DB_USER', 'spiderfoot')
-        db_pass = os.environ.get('SPIDERFOOT_DB_PASS', 'spiderfoot')
-        default_dsn = f"postgresql://{db_user}:{db_pass}@{db_host}:{db_port}/{db_name}"
+        from spiderfoot.db.db_config_builder import build_database_config
+
+        # PostgreSQL database configuration via centralized builder
+        # Allow override via SPIDERFOOT_DATABASE for backward compatibility
+        custom_dsn = os.environ.get('SPIDERFOOT_DATABASE')
+        if custom_dsn:
+            # Use custom DSN if provided
+            db_config = {
+                '__database': custom_dsn,
+                '__dbtype': os.environ.get('SPIDERFOOT_DB_TYPE', 'postgresql')
+            }
+        else:
+            # Build configuration from individual environment variables
+            db_config = build_database_config()
 
         default_config = {
             '__modules__': {},
@@ -31,8 +38,8 @@ class Config:
             '__webaddr': '127.0.0.1',
             '__webport': '8001',
             '__webaddr_apikey': None,
-            '__database': os.environ.get('SPIDERFOOT_DATABASE', default_dsn),
-            '__dbtype': os.environ.get('SPIDERFOOT_DB_TYPE', 'postgresql'),
+            '__database': db_config['__database'],
+            '__dbtype': db_config['__dbtype'],
             '__loglevel': 'INFO',
             '__logfile': '',
             '__version__': __version__,

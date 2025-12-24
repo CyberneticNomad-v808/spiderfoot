@@ -150,21 +150,24 @@ class SpiderFootWebUi(WebUiRoutes):
 
             # Validate database configuration
             if '__database' not in self.config:
-                # Read from environment variables (for PostgreSQL deployments)
-                db_type = os.getenv('SPIDERFOOT_DB_TYPE', 'sqlite').lower()
-                if db_type == 'postgresql':
-                    db_host = os.getenv('SPIDERFOOT_DB_HOST', 'localhost')
-                    db_port = os.getenv('SPIDERFOOT_DB_PORT', '5432')
-                    db_name = os.getenv('SPIDERFOOT_DB', 'spiderfoot_db')
-                    db_user = os.getenv('SPIDERFOOT_DB_USER', 'postgres')
-                    db_pass = os.getenv('SPIDERFOOT_DB_PASSWORD', '')
-                    # Construct PostgreSQL connection string
-                    if db_pass:
-                        self.config['__database'] = f"host={db_host} port={db_port} dbname={db_name} user={db_user} password={db_pass}"
-                    else:
-                        self.config['__database'] = f"host={db_host} port={db_port} dbname={db_name} user={db_user}"
-                else:
-                    self.config['__database'] = f"{SpiderFootHelpers.dataPath()}/spiderfoot.db"
+                # Read from environment variables - PostgreSQL is required
+                try:
+                    from spiderfoot.db.db_config_builder import build_database_config
+                    db_config = build_database_config()
+                    self.config['__database'] = db_config['__database']
+                    self.config['__dbtype'] = db_config['__dbtype']
+                except ValueError as e:
+                    self.log.error(f"Database configuration error: {e}")
+                    raise ValueError(
+                        "PostgreSQL configuration is required. SpiderFoot no longer supports SQLite.\n"
+                        "Set SPIDERFOOT_DB_NAME (or SPIDERFOOT_DB) environment variable.\n"
+                        "See docs/POSTGRESQL_SETUP.md for details."
+                    ) from e
+                except ImportError:
+                    # Fallback if db_config_builder is not available
+                    self.log.warning("Could not import db_config_builder, using empty database config")
+                    self.config['__database'] = ''
+                    self.config['__dbtype'] = 'postgresql'
 
         except Exception as e:
             self.log.error(f"Configuration validation failed: {e}")

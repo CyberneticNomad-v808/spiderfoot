@@ -341,62 +341,21 @@ class SpiderFootDb:
             if len(args) > 5:
                 opts['__dbtype'] = args[5]
             init = kwargs.get('init', False)
+        # Initialize core database connection via DbCore
+        # DbCore handles all connection creation, schema initialization, and validation
         self._core = DbCore(opts, init)
+
+        # Delegate to core for connection management
         self.dbh = self._core.dbh
         self.conn = self._core.conn
         self.dbhLock = self._core.dbhLock
         self.db_type = self._core.db_type
+
+        # Initialize manager modules with delegated connection
         self._scan = ScanManager(self.dbh, self.conn, self.dbhLock, self.db_type)
         self._event = EventManager(self.dbh, self.conn, self.dbhLock, self.db_type)
         self._config = ConfigManager(self.dbh, self.conn, self.dbhLock, self.db_type)
         self._correlation = CorrelationManager(self.dbh, self.conn, self.dbhLock, self.db_type)
-        if not isinstance(opts, dict):
-            raise TypeError(f"opts is {type(opts)}; expected dict()")
-        if not opts:
-            raise ValueError("opts is empty")
-        if not opts.get('__database'):
-            raise ValueError("opts['__database'] is empty")
-        # SQLite support has been removed - only PostgreSQL is supported
-        if self.db_type == 'sqlite':
-            raise ValueError("SQLite is not supported. Please use PostgreSQL by setting SPIDERFOOT_DB_TYPE=postgresql")
-        elif self.db_type == 'postgresql':
-            try:
-                self.conn = psycopg2.connect(opts['__database'])
-                self.dbh = self.conn.cursor(
-                    cursor_factory=psycopg2.extras.DictCursor)
-            except Exception as e:
-                raise IOError(
-                    f"Error connecting to PostgreSQL database {opts['__database']}") from e
-            with self.dbhLock:
-                try:
-                    self.dbh.execute('SELECT COUNT(*) FROM tbl_scan_config')
-                except psycopg2.Error:
-                    self.conn.rollback()
-                    init = True
-                    try:
-                        for query in get_schema_queries(self.db_type):
-                            self.dbh.execute(query)
-                        self.conn.commit()
-                    except Exception as e:
-                        raise IOError(
-                            "Tried to set up the SpiderFoot database schema, but failed") from e
-                if init:
-                    for row in self.eventDetails:
-                        event = row[0]
-                        event_descr = row[1]
-                        event_raw = row[2]
-                        event_type = row[3]
-                        qry = "INSERT INTO tbl_event_types (event, event_descr, event_raw, event_type) VALUES (%s, %s, %s, %s)"
-                        try:
-                            self.dbh.execute(qry, (
-                                event, event_descr, event_raw, event_type
-                            ))
-                            self.conn.commit()
-                        except Exception:
-                            continue
-                    self.conn.commit()
-        else:
-            raise ValueError(f"Unsupported database type: {self.db_type}")
 
     def connect(self):
         """

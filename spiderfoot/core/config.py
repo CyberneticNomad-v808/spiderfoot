@@ -76,14 +76,13 @@ class ConfigManager:
                 self._config['_genericusers'] = ",".join(
                     SpiderFootHelpers.usernamesFromWordlists(['generic-usernames'])
                 )
-                self._config['__database'] = f"{SpiderFootHelpers.dataPath()}/spiderfoot.db"
+                # Database configuration comes from environment variables via db_config_builder
+                # Don't set a default SQLite path here - PostgreSQL is required
             except Exception as e:
                 self.log.error(f"Failed to initialize SpiderFootHelpers configuration: {e}")
-                # Use fallback values
+                # Use fallback values for non-database config
                 self._config['_genericusers'] = ""
-                default_data_path = Path.home() / '.spiderfoot'
-                default_data_path.mkdir(exist_ok=True)
-                self._config['__database'] = str(default_data_path / 'spiderfoot.db')
+                # Don't set database path - it will be configured via environment variables
             
             # Add configuration descriptions
             self._config['__globaloptdescs__'] = self.CONFIG_DESCRIPTIONS

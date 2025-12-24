@@ -5,6 +5,7 @@ from .info import InfoEndpoints
 from .settings import SettingsEndpoints
 from .helpers import WebUiHelpers
 from .performance import PerformanceEnhancedWebUI
+import json
 import logging
 import multiprocessing as mp
 import cherrypy
@@ -992,14 +993,14 @@ class WebUiRoutes(SettingsEndpoints, ScanEndpoints, ExportEndpoints, WorkspaceEn
             scan = dbh.scanInstanceGet(scan_id)
             
             if not scan:
-                return self.error("Scan not found")
-            
+                return json.dumps({"nodes": [], "edges": [], "error": "Scan not found"})
+
             from spiderfoot.helpers import SpiderFootHelpers
-            graph_data = SpiderFootHelpers.buildGraphJson(data, scan[1])
+            graph_data = SpiderFootHelpers.buildGraphJson([scan[1]], data)
             return graph_data
-            
+
         except Exception as e:
-            return self.error(f"Visualization failed: {str(e)}")
+            return json.dumps({"nodes": [], "edges": [], "error": f"Visualization failed: {str(e)}"})
 
     @cherrypy.expose
     def scanvizmulti(self, ids, gexf="1"):
@@ -1096,18 +1097,23 @@ class WebUiRoutes(SettingsEndpoints, ScanEndpoints, ExportEndpoints, WorkspaceEn
         # Note: Database config should come from sf.py which reads environment variables
         # If it's not set, that's a critical error - don't silently default to SQLite
         if '__database' not in self.config or not self.config['__database']:
-            # Check if we have a database type to provide better error message
-            db_type = self.config.get('__dbtype', 'unknown')
-            if db_type == 'postgresql':
-                raise ValueError(
-                    "PostgreSQL database type specified but __database connection string is empty. "
-                    "Check that SPIDERFOOT_DB_* environment variables are set correctly."
-                )
-            else:
-                # Fallback to SQLite only if no db type specified
-                from spiderfoot import SpiderFootHelpers
-                self.config['__database'] = f"{SpiderFootHelpers.dataPath()}/spiderfoot.db"
-                self.config['__dbtype'] = 'sqlite'
+            # PostgreSQL is required - no SQLite fallback
+            raise ValueError(
+                "Database configuration is missing. PostgreSQL is required.\n"
+                "SpiderFoot no longer supports SQLite.\n"
+                "\n"
+                "Required environment variables:\n"
+                "  SPIDERFOOT_DB_NAME or SPIDERFOOT_DB=your_database (REQUIRED)\n"
+                "\n"
+                "Optional environment variables (with defaults):\n"
+                "  SPIDERFOOT_DB_TYPE=postgresql (default)\n"
+                "  SPIDERFOOT_DB_HOST=localhost (default)\n"
+                "  SPIDERFOOT_DB_PORT=5432 (default)\n"
+                "  SPIDERFOOT_DB_USER=spiderfoot (default)\n"
+                "  SPIDERFOOT_DB_PASSWORD=your_password (recommended)\n"
+                "\n"
+                "See docs/POSTGRESQL_SETUP.md for setup instructions."
+            )
         
         # Validate other critical configuration keys
         if '__version__' not in self.config:
