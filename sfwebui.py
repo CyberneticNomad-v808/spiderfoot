@@ -122,7 +122,7 @@ class SpiderFootWebUi(WebUiRoutes):
                 '__version__': '5.3.3',         # Default version if not set
                 '_debug': False,                # Default debug mode off
                 '__correlationrules__': [],     # Default empty correlation rules
-                '__dbtype': os.getenv('SPIDERFOOT_DB_TYPE', 'sqlite').lower()
+                '__dbtype': os.getenv('SPIDERFOOT_DB_TYPE', 'postgresql').lower()
             }
             
             for key, default_value in required_defaults.items():
@@ -149,7 +149,7 @@ class SpiderFootWebUi(WebUiRoutes):
                 self.config['__modules__'] = {}
 
             # Validate database configuration
-            if '__database' not in self.config:
+            if '__database' not in self.config or not self.config['__database']:
                 # Read from environment variables - PostgreSQL is required
                 try:
                     from spiderfoot.db.db_config_builder import build_database_config

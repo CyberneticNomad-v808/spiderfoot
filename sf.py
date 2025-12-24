@@ -79,28 +79,35 @@ dbh = None
 
 # Read database configuration from environment variables
 # PostgreSQL is required - SQLite is no longer supported
+# Allow module import without env vars for testing, but validate when actually running
 try:
     from spiderfoot.db.db_config_builder import build_database_config
     _db_config = build_database_config()
     _database_config = _db_config['__database']
     _db_type = _db_config['__dbtype']
 except ValueError as e:
-    # Provide clear error message for missing or invalid configuration
-    print(f"ERROR: Database configuration failed: {e}", file=sys.stderr)
-    print("\nSpiderFoot requires PostgreSQL. SQLite is no longer supported.", file=sys.stderr)
-    print("\nRequired environment variables:", file=sys.stderr)
-    print("  SPIDERFOOT_DB_NAME or SPIDERFOOT_DB=your_database (REQUIRED)", file=sys.stderr)
-    print("\nOptional environment variables (with defaults):", file=sys.stderr)
-    print("  SPIDERFOOT_DB_TYPE=postgresql (default)", file=sys.stderr)
-    print("  SPIDERFOOT_DB_HOST=localhost (default)", file=sys.stderr)
-    print("  SPIDERFOOT_DB_PORT=5432 (default)", file=sys.stderr)
-    print("  SPIDERFOOT_DB_USER=spiderfoot (default)", file=sys.stderr)
-    print("  SPIDERFOOT_DB_PASSWORD=your_password (recommended)", file=sys.stderr)
-    print("\nExample:", file=sys.stderr)
-    print("  export SPIDERFOOT_DB_NAME=spiderfoot_db", file=sys.stderr)
-    print("  export SPIDERFOOT_DB_PASSWORD=your_secure_password", file=sys.stderr)
-    print("\nFor more information, see docs/POSTGRESQL_SETUP.md", file=sys.stderr)
-    sys.exit(1)
+    # If running as main module, provide clear error and exit
+    # If being imported (e.g., by tests), use empty config
+    if __name__ == '__main__':
+        print(f"ERROR: Database configuration failed: {e}", file=sys.stderr)
+        print("\nSpiderFoot requires PostgreSQL. SQLite is no longer supported.", file=sys.stderr)
+        print("\nRequired environment variables:", file=sys.stderr)
+        print("  SPIDERFOOT_DB_NAME or SPIDERFOOT_DB=your_database (REQUIRED)", file=sys.stderr)
+        print("\nOptional environment variables (with defaults):", file=sys.stderr)
+        print("  SPIDERFOOT_DB_TYPE=postgresql (default)", file=sys.stderr)
+        print("  SPIDERFOOT_DB_HOST=localhost (default)", file=sys.stderr)
+        print("  SPIDERFOOT_DB_PORT=5432 (default)", file=sys.stderr)
+        print("  SPIDERFOOT_DB_USER=spiderfoot (default)", file=sys.stderr)
+        print("  SPIDERFOOT_DB_PASSWORD=your_password (recommended)", file=sys.stderr)
+        print("\nExample:", file=sys.stderr)
+        print("  export SPIDERFOOT_DB_NAME=spiderfoot_db", file=sys.stderr)
+        print("  export SPIDERFOOT_DB_PASSWORD=your_secure_password", file=sys.stderr)
+        print("\nFor more information, see docs/POSTGRESQL_SETUP.md", file=sys.stderr)
+        sys.exit(1)
+    else:
+        # Allow import for testing with empty config
+        _database_config = ''
+        _db_type = 'postgresql'
 except ImportError as e:
     # Fallback for development/testing when module structure is not yet set up
     print(f"ERROR: Failed to import db_config_builder: {e}", file=sys.stderr)
