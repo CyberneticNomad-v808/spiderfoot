@@ -55,6 +55,24 @@ class WebUiRoutes(SettingsEndpoints, ScanEndpoints, ExportEndpoints, WorkspaceEn
         except Exception:
             self.defaultConfig['__modules__'] = {}
 
+        # Override database config from environment variables BEFORE SpiderFootDb init
+        # This ensures PostgreSQL is used when configured via environment
+        import os
+        from urllib.parse import quote_plus
+        db_type = os.getenv('SPIDERFOOT_DB_TYPE', 'sqlite').lower()
+        if db_type == 'postgresql':
+            db_host = os.getenv('SPIDERFOOT_DB_HOST', 'localhost')
+            db_port = os.getenv('SPIDERFOOT_DB_PORT', '5432')
+            db_name = os.getenv('SPIDERFOOT_DB', 'spiderfoot_db')
+            db_user = os.getenv('SPIDERFOOT_DB_USER', 'postgres')
+            db_pass = os.getenv('SPIDERFOOT_DB_PASSWORD', '')
+            # Use DSN URI format: postgresql://user:password@host:port/database
+            if db_pass:
+                self.defaultConfig['__database'] = f"postgresql://{quote_plus(db_user)}:{quote_plus(db_pass)}@{db_host}:{db_port}/{db_name}"
+            else:
+                self.defaultConfig['__database'] = f"postgresql://{quote_plus(db_user)}@{db_host}:{db_port}/{db_name}"
+            self.defaultConfig['__dbtype'] = 'postgresql'
+
         # Now initialize database and load saved config
         dbh = SpiderFootDb(self.defaultConfig, init=True)
         sf = SpiderFoot(self.defaultConfig)
@@ -356,11 +374,15 @@ class WebUiRoutes(SettingsEndpoints, ScanEndpoints, ExportEndpoints, WorkspaceEn
 
     @cherrypy.expose
     @cherrypy.tools.json_out()
-    def scanerrors(self, scanid):
+    def scanerrors(self, id=None, scanid=None):
         """Return scan errors for a given scan ID, matching legacy API."""
         try:
+            # Accept both 'id' and 'scanid' parameters for compatibility
+            scan_id = id or scanid
+            if not scan_id:
+                return {'error': 'No scan ID provided'}
             dbh = self._get_dbh()
-            errors = dbh.scanErrors(scanid)
+            errors = dbh.scanErrors(scan_id)
             return errors if errors is not None else []
         except Exception as e:
             return {'error': str(e)}
@@ -518,23 +540,58 @@ class WebUiRoutes(SettingsEndpoints, ScanEndpoints, ExportEndpoints, WorkspaceEn
         """Start a new scan"""
         try:
             from sfwebui import SpiderFootHelpers
-            
+            import logging
+            logger = logging.getLogger('startscan')
+
             # Generate scan ID
             scanId = SpiderFootHelpers.genScanInstanceId()
-            
+
             # Determine target type
             targetType = SpiderFootHelpers.targetTypeFromString(scantarget)
             if not targetType:
                 return self.error("Invalid target type")
-            
+
+            # Build module list from all inputs (like scan.py does)
+            modlist = []
+            if modulelist:
+                modlist = [m for m in modulelist.split(',') if m]
+            if not modlist and typelist:
+                modlist = [t for t in typelist.split(',') if t]
+            if not modlist and usecase:
+                modlist = [u for u in usecase.split(',') if u]
+
+            if not modlist:
+                return self.error("No modules selected")
+
+            # Expand 'all' to actual module list if present
+            if 'all' in modlist:
+                modlist = [m for m in modlist if m != 'all']
+                try:
+                    modules = SpiderFootHelpers.loadModulesAsDict(
+                        SpiderFootHelpers.dataPath() + '/../modules',
+                        ['sfp_template.py']
+                    )
+                    all_modules = [m for m in modules.keys() if m.startswith('sfp_')]
+                    for mod in all_modules:
+                        if mod not in modlist:
+                            modlist.append(mod)
+                except Exception:
+                    pass
+
+            # Ensure sfp__stor_db is included
+            if "sfp__stor_db" not in modlist:
+                modlist.append("sfp__stor_db")
+
+            logger.info(f"Starting scan {scanId} with {len(modlist)} modules: {modlist[:5]}...")
+
             # Start the scan process
             from sfwebui import mp
             from spiderfoot.scan_service.scanner import startSpiderFootScanner
-            
+
             process = mp.Process(
                 target=startSpiderFootScanner,
-                args=(self.loggingQueue, scanname, scanId, scantarget, targetType, 
-                      modulelist.split(','), self.config)
+                args=(self.loggingQueue, scanname, scanId, scantarget, targetType,
+                      modlist, self.config)
             )
             process.daemon = True
             process.start()
@@ -985,12 +1042,16 @@ class WebUiRoutes(SettingsEndpoints, ScanEndpoints, ExportEndpoints, WorkspaceEn
         return json.dumps(scaninfo).encode('utf-8')
 
     @cherrypy.expose
-    def scanviz(self, scan_id, gexf="0"):
+    def scanviz(self, id=None, scan_id=None, gexf="0"):
         """Generate scan visualization"""
         try:
+            # Accept both 'id' and 'scan_id' parameters for compatibility
+            sid = id or scan_id
+            if not sid:
+                return json.dumps({"nodes": [], "edges": [], "error": "No scan ID provided"})
             dbh = self._get_dbh()
-            data = dbh.scanResultEvent(scan_id)
-            scan = dbh.scanInstanceGet(scan_id)
+            data = dbh.scanResultEvent(sid)
+            scan = dbh.scanInstanceGet(sid)
             
             if not scan:
                 return json.dumps({"nodes": [], "edges": [], "error": "Scan not found"})

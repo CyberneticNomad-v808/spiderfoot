@@ -290,7 +290,65 @@ class InputValidator:
         for header in dangerous_headers:
             if content.startswith(header):
                 return False
-        
+
+        return True
+
+    @classmethod
+    def validate_input(cls, value: str) -> bool:
+        """Validate generic string input for XSS/injection attacks.
+
+        Checks for common dangerous patterns that could indicate XSS,
+        script injection, or other malicious input.
+
+        Args:
+            value: String input to validate
+
+        Returns:
+            True if input is safe, False if potentially malicious
+        """
+        if not isinstance(value, str):
+            return True
+
+        # Common XSS and injection patterns
+        dangerous_patterns = [
+            r'<script',
+            r'javascript:',
+            r'on\w+=',
+            r'<iframe',
+            r'<object',
+            r'<embed',
+            r'<form',
+            r'data:text/html',
+            r'vbscript:',
+        ]
+
+        value_lower = value.lower()
+        for pattern in dangerous_patterns:
+            if re.search(pattern, value_lower, re.IGNORECASE):
+                return False
+
+        return True
+
+    @classmethod
+    def validate_json_input(cls, data: Any) -> bool:
+        """Validate JSON data recursively for XSS/injection.
+
+        Recursively validates all string values in a JSON structure
+        (dicts, lists, nested structures).
+
+        Args:
+            data: JSON-parsed data (dict, list, or primitive)
+
+        Returns:
+            True if all values are safe, False if any are potentially malicious
+        """
+        if isinstance(data, dict):
+            return all(cls.validate_json_input(v) for v in data.values())
+        elif isinstance(data, list):
+            return all(cls.validate_json_input(v) for v in data)
+        elif isinstance(data, str):
+            return cls.validate_input(data)
+        # Non-string primitives (int, float, bool, None) are safe
         return True
 
 

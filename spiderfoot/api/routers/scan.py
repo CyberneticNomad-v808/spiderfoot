@@ -20,6 +20,51 @@ from pydantic import BaseModel, Field
 router = APIRouter()
 logger = logging.getLogger(__name__)
 
+
+def expand_all_modules(modlist: list) -> list:
+    """Expand 'all' meta-directive to list of all available modules.
+
+    When a scan was originally started with 'all' modules, the _modulesenabled
+    config stores 'all' literally. This function expands it to actual module names
+    by scanning the modules directory.
+
+    Args:
+        modlist: List of module names (may contain 'all')
+
+    Returns:
+        List with 'all' replaced by actual module names
+    """
+    if 'all' not in modlist:
+        return modlist
+
+    # Remove 'all' from list
+    modlist = [m for m in modlist if m != 'all']
+
+    # Load modules directly from the modules directory
+    try:
+        modules = SpiderFootHelpers.loadModulesAsDict(
+            SpiderFootHelpers.dataPath() + '/../modules',
+            ['sfp_template.py']
+        )
+        all_modules = [m for m in modules.keys() if m.startswith('sfp_')]
+    except Exception:
+        # Fallback: scan the modules directory directly
+        import os
+        import glob
+        modules_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), '../../../modules')
+        all_modules = []
+        for f in glob.glob(os.path.join(modules_dir, 'sfp_*.py')):
+            mod_name = os.path.basename(f).replace('.py', '')
+            if mod_name != 'sfp_template':
+                all_modules.append(mod_name)
+
+    # Extend with all modules (avoiding duplicates)
+    for mod in all_modules:
+        if mod not in modlist:
+            modlist.append(mod)
+
+    return modlist
+
 api_key_dep = Depends(get_api_key)
 optional_auth_dep = Depends(optional_auth)
 limit_query = Query(50, ge=1, le=1000)
@@ -605,6 +650,8 @@ async def rerun_scan(scan_id: str, api_key: str = Depends(get_api_key)):
     if not scanconfig:
         raise HTTPException(status_code=400, detail=f"Error loading config from scan: {scan_id}")
     modlist = scanconfig['_modulesenabled'].split(',')
+    # Expand 'all' to actual module list if present
+    modlist = expand_all_modules(modlist)
     if "sfp__stor_stdout" in modlist:
         modlist.remove("sfp__stor_stdout")
     targetType = SpiderFootHelpers.targetTypeFromString(scantarget)
@@ -645,6 +692,8 @@ async def rerun_scan_multi(ids: str, api_key: str = Depends(get_api_key)):
         if not scantarget or not scanconfig:
             continue
         modlist = scanconfig['_modulesenabled'].split(',')
+        # Expand 'all' to actual module list if present
+        modlist = expand_all_modules(modlist)
         if "sfp__stor_stdout" in modlist:
             modlist.remove("sfp__stor_stdout")
         targetType = SpiderFootHelpers.targetTypeFromString(scantarget)
@@ -690,6 +739,8 @@ async def clone_scan(scan_id: str, api_key: str = Depends(get_api_key)):
     if not scanconfig:
         raise HTTPException(status_code=400, detail=f"Error loading config from scan: {scan_id}")
     modlist = scanconfig['_modulesenabled'].split(',')
+    # Expand 'all' to actual module list if present
+    modlist = expand_all_modules(modlist)
     if "sfp__stor_stdout" in modlist:
         modlist.remove("sfp__stor_stdout")
     targetType = SpiderFootHelpers.targetTypeFromString(scantarget)

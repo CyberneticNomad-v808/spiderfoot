@@ -396,47 +396,32 @@ class CherryPySecurityTool(cherrypy.Tool):
     def _validate_request_data(self, request):
         """Validate request data for security threats."""
         try:
-            # Get request body - use params instead of reading body stream to avoid exhausting it
-            if hasattr(request, 'body') and request.body:
-                # Save position and read, then reset for the actual handler
-                try:
-                    body_data = request.body.read()
-                    request.body.seek(0)  # Reset stream position for actual handler
-                except (AttributeError, OSError):
-                    # Some file-like objects don't support seek, fall back to using params
-                    body_data = b''
-
-                if body_data:
-                    # Validate based on content type
-                    content_type = request.headers.get('Content-Type', '')
-                    
-                    if 'application/json' in content_type:
-                        try:
-                            json_data = json.loads(body_data)
-                            if not self.middleware.input_validator.validate_json_input(json_data):
-                                self._block_request(400, "Invalid input data")
-                                return
-                        except json.JSONDecodeError:
-                            self._block_request(400, "Invalid JSON data")
+            # Use cherrypy.request.params instead of reading body directly
+            # CherryPy has already parsed the body into params, and reading
+            # body.read() after that causes issues with KnownLengthRFile
+            if hasattr(request, 'params') and request.params:
+                for key, value in request.params.items():
+                    if isinstance(value, str):
+                        if (self.middleware.input_validator is not None and
+                                not self.middleware.input_validator.validate_input(value)):
+                            self._block_request(400, f"Invalid input in field: {key}")
                             return
-                    
-                    elif 'application/x-www-form-urlencoded' in content_type:
-                        # Parse form data and validate
-                        form_data = cherrypy.lib.httputil.parse_query_string(body_data.decode('utf-8'))
-                        for key, value in form_data.items():
-                            if not self.middleware.input_validator.validate_input(value):
-                                self._block_request(400, f"Invalid input in field: {key}")
-                                return
-            
+                    elif isinstance(value, (dict, list)):
+                        # Handle JSON-like nested structures
+                        if (self.middleware.input_validator is not None and
+                                not self.middleware.input_validator.validate_json_input(value)):
+                            self._block_request(400, f"Invalid input in field: {key}")
+                            return
+
             # Validate query parameters
             if request.query_string:
                 query_params = cherrypy.lib.httputil.parse_query_string(request.query_string)
                 for key, value in query_params.items():
-                    if (self.middleware.input_validator is not None and 
-                        not self.middleware.input_validator.validate_input(value)):
+                    if (self.middleware.input_validator is not None and
+                            not self.middleware.input_validator.validate_input(value)):
                         self._block_request(400, f"Invalid query parameter: {key}")
                         return
-                        
+
         except Exception as e:
             self.log.warning(f"Input validation error: {e}")
     

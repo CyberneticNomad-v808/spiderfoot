@@ -66,7 +66,7 @@ class ConfigManager:
     def initialize(self) -> Dict[str, Any]:
         """
         Initialize configuration with runtime values.
-        
+
         Returns:
             Dict containing the initialized configuration
         """
@@ -76,21 +76,36 @@ class ConfigManager:
                 self._config['_genericusers'] = ",".join(
                     SpiderFootHelpers.usernamesFromWordlists(['generic-usernames'])
                 )
-                # Database configuration comes from environment variables via db_config_builder
-                # Don't set a default SQLite path here - PostgreSQL is required
             except Exception as e:
                 self.log.error(f"Failed to initialize SpiderFootHelpers configuration: {e}")
                 # Use fallback values for non-database config
                 self._config['_genericusers'] = ""
-                # Don't set database path - it will be configured via environment variables
-            
+
+            # Initialize database configuration from environment variables
+            try:
+                from spiderfoot.db.db_config_builder import build_database_config
+                db_config = build_database_config()
+                self._config['__database'] = db_config['__database']
+                self._config['__dbtype'] = db_config['__dbtype']
+                self.log.info(f"Database configuration loaded: {db_config['__dbtype']}")
+            except ValueError as e:
+                self.log.error(f"Database configuration error: {e}")
+                raise ValueError(
+                    "PostgreSQL configuration is required. SpiderFoot no longer supports SQLite.\n"
+                    "Set SPIDERFOOT_DB_NAME (or SPIDERFOOT_DB) environment variable.\n"
+                    "See docs/POSTGRESQL_SETUP.md for details."
+                ) from e
+            except ImportError as e:
+                self.log.error(f"Failed to import db_config_builder: {e}")
+                raise ImportError("Database configuration builder not available") from e
+
             # Add configuration descriptions
             self._config['__globaloptdescs__'] = self.CONFIG_DESCRIPTIONS
-            
+
             self._initialized = True
             self.log.info("Configuration initialized successfully")
             return deepcopy(self._config)
-            
+
         except Exception as e:
             self.log.error(f"Failed to initialize configuration: {e}")
             raise

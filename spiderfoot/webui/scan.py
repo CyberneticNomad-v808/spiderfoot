@@ -9,6 +9,51 @@ from spiderfoot.scan_service.scanner import startSpiderFootScanner
 import multiprocessing as mp
 import html
 
+def expand_all_modules(modlist: list) -> list:
+    """Expand 'all' meta-directive to list of all available modules.
+
+    When a scan was originally started with 'all' modules, the _modulesenabled
+    config stores 'all' literally. This function expands it to actual module names
+    by scanning the modules directory.
+
+    Args:
+        modlist: List of module names (may contain 'all')
+
+    Returns:
+        List with 'all' replaced by actual module names
+    """
+    if 'all' not in modlist:
+        return modlist
+
+    # Remove 'all' from list
+    modlist = [m for m in modlist if m != 'all']
+
+    # Load modules directly from the modules directory
+    try:
+        modules = SpiderFootHelpers.loadModulesAsDict(
+            SpiderFootHelpers.dataPath() + '/../modules',
+            ['sfp_template.py']
+        )
+        all_modules = [m for m in modules.keys() if m.startswith('sfp_')]
+    except Exception:
+        # Fallback: scan the modules directory directly
+        import os
+        import glob
+        modules_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), '../../modules')
+        all_modules = []
+        for f in glob.glob(os.path.join(modules_dir, 'sfp_*.py')):
+            mod_name = os.path.basename(f).replace('.py', '')
+            if mod_name != 'sfp_template':
+                all_modules.append(mod_name)
+
+    # Extend with all modules (avoiding duplicates)
+    for mod in all_modules:
+        if mod not in modlist:
+            modlist.append(mod)
+
+    return modlist
+
+
 class ScanEndpoints:
     @cherrypy.expose
     @cherrypy.tools.json_out()
@@ -23,8 +68,28 @@ class ScanEndpoints:
         ret['meta'] = [meta[0], meta[1], meta[2], started, finished, meta[5]]
         ret['config'] = dbh.scanConfigGet(id)
         ret['configdesc'] = dict()
+
+        # Get module descriptions from loaded modules
+        modules = self.config.get('__modules__', {})
+
         for key in list(ret['config'].keys()):
-            ret['configdesc'][key] = ret['config'][key]
+            if ':' in key:
+                # Module option: key format is "module:option"
+                parts = key.split(':', 1)
+                module_name = parts[0]
+                option_name = parts[1]
+                # Look up description from module's optdescs
+                if module_name in modules:
+                    mod_info = modules[module_name]
+                    if isinstance(mod_info, dict) and 'optdescs' in mod_info:
+                        ret['configdesc'][key] = mod_info['optdescs'].get(option_name, option_name)
+                    else:
+                        ret['configdesc'][key] = option_name
+                else:
+                    ret['configdesc'][key] = option_name
+            else:
+                # Global option - use key as description
+                ret['configdesc'][key] = key
         return ret
 
     @cherrypy.expose
@@ -42,6 +107,8 @@ class ScanEndpoints:
         if not scanconfig:
             return self.error("Scan config not found")
         modlist = scanconfig['_modulesenabled'].split(',')
+        # Expand 'all' to actual module list if present
+        modlist = expand_all_modules(modlist)
         if "sfp__stor_stdout" in modlist:
             modlist.remove("sfp__stor_stdout")
         targetType = SpiderFootHelpers.targetTypeFromString(scantarget)
@@ -89,6 +156,8 @@ class ScanEndpoints:
                 errors.append(f"Scan config not found: {scan_id}")
                 continue
             modlist = scanconfig['_modulesenabled'].split(',')
+            # Expand 'all' to actual module list if present
+            modlist = expand_all_modules(modlist)
             if "sfp__stor_stdout" in modlist:
                 modlist.remove("sfp__stor_stdout")
             targetType = SpiderFootHelpers.targetTypeFromString(scantarget)
@@ -141,6 +210,8 @@ class ScanEndpoints:
         if targetType is None:
             return self.error("Invalid target type")
         modlist = scanconfig['_modulesenabled'].split(',')
+        # Expand 'all' to actual module list if present
+        modlist = expand_all_modules(modlist)
         templ = Template(filename='spiderfoot/templates/newscan.tmpl', lookup=self.lookup)
         return templ.render(pageid='NEWSCAN', types=types, docroot=self.docroot,
                             modules=self.config['__modules__'], selectedmods=modlist,
@@ -327,6 +398,8 @@ class ScanEndpoints:
             modlist = usecase.split(',')
         if not modlist:
             return self.error("No modules selected")
+        # Expand 'all' to actual module list if present
+        modlist = expand_all_modules(modlist)
         if "sfp__stor_db" not in modlist:
             modlist.append("sfp__stor_db")
         modlist.sort()

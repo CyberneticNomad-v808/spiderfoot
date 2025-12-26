@@ -714,14 +714,17 @@ class DbCore:
         # Placeholder for future logging integration
         print(f"[DB ERROR] {msg}: {exc}")
 
-    def __init__(self, opts: dict, init: bool = False) -> None:
+    def __init__(self, opts: dict, init: bool = False, eventDetails: list = None) -> None:
         """
         Initialize the DbCore object.
 
         Args:
             opts (dict): Options for the database connection.
             init (bool, optional): Flag to initialize the database. Defaults to False.
+            eventDetails (list, optional): List of event types to populate. Required for init=True.
         """
+        if eventDetails is not None:
+            self.eventDetails = eventDetails
         if not isinstance(opts, dict):
             raise TypeError(f"opts is {type(opts)}; expected dict()")
         if not opts:

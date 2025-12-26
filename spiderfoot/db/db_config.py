@@ -49,6 +49,10 @@ class ConfigManager:
                         break
                     except Exception as e:
                         self._log_db_error("SQL error encountered when storing config", e)
+                        try:
+                            self.conn.rollback()
+                        except Exception:
+                            pass
                         if self._is_transient_error(e) and attempt < 2:
                             time.sleep(0.2 * (attempt + 1))
                             continue
@@ -59,6 +63,10 @@ class ConfigManager:
                     return True
                 except Exception as e:
                     self._log_db_error("SQL error encountered when storing config (commit)", e)
+                    try:
+                        self.conn.rollback()
+                    except Exception:
+                        pass
                     if self._is_transient_error(e) and attempt < 2:
                         time.sleep(0.2 * (attempt + 1))
                         continue

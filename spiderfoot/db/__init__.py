@@ -343,7 +343,8 @@ class SpiderFootDb:
             init = kwargs.get('init', False)
         # Initialize core database connection via DbCore
         # DbCore handles all connection creation, schema initialization, and validation
-        self._core = DbCore(opts, init)
+        # Pass eventDetails from SpiderFootDb to DbCore for correct event type population
+        self._core = DbCore(opts, init, eventDetails=self.eventDetails)
 
         # Delegate to core for connection management
         self.dbh = self._core.dbh
