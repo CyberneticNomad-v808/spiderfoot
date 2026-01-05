@@ -114,6 +114,8 @@ class SpiderFootWebUi(WebUiRoutes):
     
     def _validate_configuration(self):
         """Validate the configuration and fix common issues."""
+        import os
+
         try:
             # Validate and set default values for required configuration keys
             required_defaults = {
@@ -133,7 +135,6 @@ class SpiderFootWebUi(WebUiRoutes):
             if '__correlationrules__' not in self.config or not self.config.get('__correlationrules__'):
                 try:
                     from spiderfoot.correlation.rule_loader import RuleLoader
-                    import os
 
                     # Determine correlations directory
                     script_dir = os.path.dirname(os.path.abspath(__file__))
