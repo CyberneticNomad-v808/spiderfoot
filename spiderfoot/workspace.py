@@ -455,7 +455,7 @@ class SpiderFootWorkspace:
 
         try:
             self.log.debug(f"[MULTISCAN] Importing startSpiderFootScanner...")
-            from sfscan import startSpiderFootScanner
+            from spiderfoot.scan_service.scanner import startSpiderFootScanner
             self.log.debug(f"[MULTISCAN] Import successful")
 
             # Parse targets if they're still strings
