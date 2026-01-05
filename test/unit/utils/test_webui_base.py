@@ -1,6 +1,7 @@
 """
 Enhanced base class for web UI tests with robust timeout protection and resource cleanup.
 """
+import os
 import threading
 import time
 import queue
@@ -11,6 +12,15 @@ from functools import wraps
 from unittest.mock import patch, MagicMock
 from cherrypy.test import helper
 from test.unit.utils.test_base import TestModuleBase
+
+# Set required environment variables for database module BEFORE any imports
+# These are required by sfp__stor_db which reads os.environ at class definition time
+os.environ.setdefault('SPIDERFOOT_DB_TYPE', 'postgresql')
+os.environ.setdefault('SPIDERFOOT_DB_HOST', 'localhost')
+os.environ.setdefault('SPIDERFOOT_DB_PORT', '5432')
+os.environ.setdefault('SPIDERFOOT_DB_NAME', 'spiderfoot_test')
+os.environ.setdefault('SPIDERFOOT_DB_USER', 'spiderfoot')
+os.environ.setdefault('SPIDERFOOT_DB_PASSWORD', '')
 
 try:
     import psutil

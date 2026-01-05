@@ -1,8 +1,7 @@
 # -*- coding: utf-8 -*-
 # -------------------------------------------------------------------------------
 # Name:         sfp_stor_db
-# Purpose:      SpiderFoot plug-in for storing events to the configured database
-#               backend (SQLite or PostgreSQL).
+# Purpose:      SpiderFoot plug-in for storing events to PostgreSQL database.
 #
 # Author:      Steve Micallef <steve@binarypool.com>
 #
@@ -10,6 +9,8 @@
 # Copyright:   (c) Steve Micallef 2012
 # Licence:     MIT
 # -------------------------------------------------------------------------------
+
+import os
 
 try:
     import psycopg2
@@ -21,11 +22,10 @@ from spiderfoot import SpiderFootPlugin
 
 
 class sfp__stor_db(SpiderFootPlugin):
-    """SpiderFoot plug-in for storing events to the configured database
-    backend.
+    """SpiderFoot plug-in for storing events to PostgreSQL database.
 
     This class is responsible for storing scan results into the back-end
-    SpiderFoot database (SQLite or PostgreSQL).
+    SpiderFoot PostgreSQL database.
     """
 
     meta = {
@@ -34,17 +34,17 @@ class sfp__stor_db(SpiderFootPlugin):
         'flags': ["slow"]
     }
 
-    _priority = 0    # Default options
+    _priority = 0    # Default options - read from environment variables (required, no fallbacks)
     opts = {
         # max bytes for any piece of info stored (0 = unlimited)
         'maxstorage': 1024,
         '_store': True,
-        'db_type': 'sqlite',  # sqlite or postgresql
-        'postgresql_host': 'localhost',
-        'postgresql_port': 5432,
-        'postgresql_database': 'spiderfoot',
-        'postgresql_username': 'spiderfoot',
-        'postgresql_password': '',
+        'db_type': os.environ['SPIDERFOOT_DB_TYPE'].lower(),
+        'postgresql_host': os.environ['SPIDERFOOT_DB_HOST'],
+        'postgresql_port': int(os.environ['SPIDERFOOT_DB_PORT']),
+        'postgresql_database': os.environ.get('SPIDERFOOT_DB_NAME') or os.environ['SPIDERFOOT_DB'],
+        'postgresql_username': os.environ['SPIDERFOOT_DB_USER'],
+        'postgresql_password': os.environ.get('SPIDERFOOT_DB_PASSWORD') or os.environ.get('SPIDERFOOT_DB_PASS', ''),
         'postgresql_timeout': 30,
         # Phase 2 enterprise features (stub implementations)
         'enable_auto_recovery': False,
@@ -60,7 +60,7 @@ class sfp__stor_db(SpiderFootPlugin):
         'collect_metrics': False
     }    # Option descriptions
     optdescs = {        'maxstorage': "Maximum bytes to store for any piece of information retrieved (0 = unlimited.)",
-        'db_type': "Database type to use (sqlite or postgresql)",
+        'db_type': "Database type (postgresql only - sqlite removed)",
         'postgresql_host': "PostgreSQL host if using postgresql as db_type",
         'postgresql_port': "PostgreSQL port if using postgresql as db_type",
         'postgresql_database': "PostgreSQL database name if using postgresql as db_type",
@@ -103,6 +103,15 @@ class sfp__stor_db(SpiderFootPlugin):
         for opt in list(userOpts.keys()):
             self.opts[opt] = userOpts[opt]
 
+        # CRITICAL: Environment variables ALWAYS take precedence over saved settings
+        # This ensures Docker deployments use the correct database host
+        self.opts['db_type'] = os.environ['SPIDERFOOT_DB_TYPE'].lower()
+        self.opts['postgresql_host'] = os.environ['SPIDERFOOT_DB_HOST']
+        self.opts['postgresql_port'] = int(os.environ['SPIDERFOOT_DB_PORT'])
+        self.opts['postgresql_database'] = os.environ.get('SPIDERFOOT_DB_NAME') or os.environ['SPIDERFOOT_DB']
+        self.opts['postgresql_username'] = os.environ['SPIDERFOOT_DB_USER']
+        self.opts['postgresql_password'] = os.environ.get('SPIDERFOOT_DB_PASSWORD') or os.environ.get('SPIDERFOOT_DB_PASS', '')
+
         # Validate configuration
         if not self._validateConfig():
             self.errorState = True
@@ -123,8 +132,8 @@ class sfp__stor_db(SpiderFootPlugin):
         Returns:
             bool: True if config is valid, False otherwise
         """
-        if self.opts['db_type'] not in ['sqlite', 'postgresql']:
-            self.error(f"Invalid db_type: {self.opts['db_type']}. Must be 'sqlite' or 'postgresql'")
+        if self.opts['db_type'] != 'postgresql':
+            self.error(f"Invalid db_type: {self.opts['db_type']}. Only 'postgresql' is supported (sqlite removed)")
             return False
             
         if self.opts['db_type'] == 'postgresql':

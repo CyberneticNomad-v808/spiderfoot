@@ -21,13 +21,20 @@ class SpiderFootWorkspace:
 
     def __init__(self, config: dict, workspace_id: str = None, name: str = None):
         """Initialize workspace.
-        
+
         Args:
             config: SpiderFoot configuration
             workspace_id: Existing workspace ID to load
             name: Name for new workspace
         """
         self.config = config
+
+        # Ensure database config is present
+        if '__database' not in config or not config['__database']:
+            from spiderfoot.db.db_config_builder import build_database_config
+            db_config = build_database_config()
+            config.update(db_config)
+
         self.db = SpiderFootDb(config, init=True)
         self.log = logging.getLogger(f"spiderfoot.workspace")
         

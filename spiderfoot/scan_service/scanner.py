@@ -491,23 +491,37 @@ class SpiderFootScanner():
             self.__dbh.close()
 
     def runCorrelations(self) -> None:
-        from spiderfoot.correlation.rule_executor import RuleExecutor
-        from spiderfoot.correlation.event_enricher import EventEnricher
-        from spiderfoot.correlation.result_aggregator import ResultAggregator
+        """Run correlation rules on completed scan."""
+        try:
+            from spiderfoot.correlation.rule_executor import RuleExecutor
+            from spiderfoot.correlation.event_enricher import EventEnricher
+            from spiderfoot.correlation.result_aggregator import ResultAggregator
 
-        self.__sf.status(
-            f"Running {len(self.__config['__correlationrules__'])} correlation rules on scan {self.__scanId}.")
-        rules = self.__config['__correlationrules__']
-        executor = RuleExecutor(self.__dbh, rules, scan_ids=[self.__scanId])
-        results = executor.run()
-        enricher = EventEnricher(self.__dbh)
-        for rule_id, result in results.items():
-            if 'events' in result:
-                result['events'] = enricher.enrich_sources(self.__scanId, result['events'])
-                result['events'] = enricher.enrich_entities(self.__scanId, result['events'])
-        aggregator = ResultAggregator()
-        agg_count = aggregator.aggregate(list(results.values()), method='count')
-        self.__sf.status(f"Correlated {agg_count} results for scan {self.__scanId}")
+            # Check if correlation rules exist
+            if '__correlationrules__' not in self.__config:
+                self.__sf.error("No correlation rules found in configuration")
+                return
+
+            rules = self.__config['__correlationrules__']
+            if not rules:
+                self.__sf.info("No correlation rules configured, skipping correlation")
+                return
+
+            self.__sf.status(
+                f"Running {len(rules)} correlation rules on scan {self.__scanId}.")
+
+            executor = RuleExecutor(self.__dbh, rules, scan_ids=[self.__scanId])
+            results = executor.run()
+            enricher = EventEnricher(self.__dbh)
+            for rule_id, result in results.items():
+                if 'events' in result:
+                    result['events'] = enricher.enrich_sources(self.__scanId, result['events'])
+                    result['events'] = enricher.enrich_entities(self.__scanId, result['events'])
+            aggregator = ResultAggregator()
+            agg_count = aggregator.aggregate(list(results.values()), method='count')
+            self.__sf.status(f"Correlated {agg_count} results for scan {self.__scanId}")
+        except Exception as e:
+            self.__sf.error(f"Failed to run correlations for scan {self.__scanId}: {e}", exc_info=True)
 
     def waitForThreads(self) -> None:
         if not self.eventQueue:

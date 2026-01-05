@@ -7,11 +7,21 @@ Provides automatic resource management, thread cleanup, and leak detection
 for all SpiderFoot module tests.
 """
 
+import os
 import unittest
 import threading
 import time
 from contextlib import suppress
 from typing import Any, Optional
+
+# Set required environment variables for database module BEFORE any SpiderFoot imports
+# These are required by sfp__stor_db which reads os.environ at class definition time
+os.environ.setdefault('SPIDERFOOT_DB_TYPE', 'postgresql')
+os.environ.setdefault('SPIDERFOOT_DB_HOST', 'localhost')
+os.environ.setdefault('SPIDERFOOT_DB_PORT', '5432')
+os.environ.setdefault('SPIDERFOOT_DB_NAME', 'spiderfoot_test')
+os.environ.setdefault('SPIDERFOOT_DB_USER', 'spiderfoot')
+os.environ.setdefault('SPIDERFOOT_DB_PASSWORD', '')
 
 try:
     # Relative imports (when called from package)

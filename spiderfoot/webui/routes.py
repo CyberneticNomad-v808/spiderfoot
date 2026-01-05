@@ -509,33 +509,6 @@ class WebUiRoutes(SettingsEndpoints, ScanEndpoints, ExportEndpoints, WorkspaceEn
             return b'["ERROR", "%s"]' % str(e).encode('utf-8')
 
     @cherrypy.expose
-    def savesettings(self, allopts, token, configFile=None):
-        """Save settings"""
-        # Only check CSRF token if CSRF protection is enabled
-        if self.config.get('_csrf_enabled', False):
-            if not hasattr(self, 'token') or str(self.token) != str(token):
-                return self.error("Invalid token")
-
-        try:
-            import json
-            dbh = self._get_dbh()
-            opts = json.loads(allopts)
-            
-            # Save configuration
-            from spiderfoot.sflib import SpiderFoot
-            sf = SpiderFoot(self.config)
-            serialized = sf.configSerialize(opts, self.defaultConfig)
-            dbh.configSet(serialized)
-            
-            # Redirect to settings page
-            raise cherrypy.HTTPRedirect(f"{self.docroot}/opts?updated=1")
-            
-        except cherrypy.HTTPRedirect:
-            raise
-        except Exception as e:
-            return self.error(f"Processing one or more of your inputs failed. {str(e)}")
-
-    @cherrypy.expose
     def startscan(self, scanname, scantarget, modulelist, typelist, usecase):
         """Start a new scan"""
         try:
@@ -635,7 +608,15 @@ class WebUiRoutes(SettingsEndpoints, ScanEndpoints, ExportEndpoints, WorkspaceEn
             if not scanconfig:
                 return self.error(f"Error loading config from scan: {id}")
                 
-            modlist = scanconfig['_modulesenabled'].split(',')
+            # Parse module list - handle both JSON array and comma-separated formats
+            modules_enabled = scanconfig['_modulesenabled']
+            if modules_enabled.startswith('['):
+                # JSON array format
+                import json
+                modlist = json.loads(modules_enabled)
+            else:
+                # Comma-separated format (legacy)
+                modlist = modules_enabled.split(',')
             if "sfp__stor_stdout" in modlist:
                 modlist.remove("sfp__stor_stdout")
                 

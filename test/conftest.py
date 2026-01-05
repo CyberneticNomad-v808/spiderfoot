@@ -7,6 +7,27 @@ import logging
 import threading
 from pathlib import Path
 from _pytest.runner import runtestprotocol
+from unittest.mock import MagicMock, patch
+
+# CRITICAL: Mock psycopg2.connect BEFORE any database code imports
+mock_conn = MagicMock()
+mock_cursor = MagicMock()
+mock_conn.cursor.return_value = mock_cursor
+mock_cursor.fetchone.return_value = None
+mock_cursor.fetchall.return_value = []
+mock_cursor.execute.return_value = None
+
+psycopg2_connect_patcher = patch('psycopg2.connect', return_value=mock_conn)
+psycopg2_connect_patcher.start()
+
+# CRITICAL: Set required environment variables BEFORE any SpiderFoot imports
+# These are required by sfp__stor_db which reads os.environ at class definition time
+os.environ.setdefault('SPIDERFOOT_DB_TYPE', 'postgresql')
+os.environ.setdefault('SPIDERFOOT_DB_HOST', 'localhost')
+os.environ.setdefault('SPIDERFOOT_DB_PORT', '5432')
+os.environ.setdefault('SPIDERFOOT_DB_NAME', 'spiderfoot_test')
+os.environ.setdefault('SPIDERFOOT_DB_USER', 'spiderfoot')
+os.environ.setdefault('SPIDERFOOT_DB_PASSWORD', '')
 
 # Ensure we're in the correct directory for tests
 PROJECT_ROOT = Path(__file__).parent.parent

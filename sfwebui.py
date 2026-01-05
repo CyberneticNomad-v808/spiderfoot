@@ -121,14 +121,45 @@ class SpiderFootWebUi(WebUiRoutes):
                 '_logging': 'INFO',             # Default logging level
                 '__version__': '5.3.3',         # Default version if not set
                 '_debug': False,                # Default debug mode off
-                '__correlationrules__': [],     # Default empty correlation rules
                 '__dbtype': os.getenv('SPIDERFOOT_DB_TYPE', 'postgresql').lower()
             }
-            
+
             for key, default_value in required_defaults.items():
                 if key not in self.config:
                     self.log.info(f"Setting default value for missing configuration key '{key}': {default_value}")
                     self.config[key] = default_value
+
+            # Load correlation rules from filesystem if not already loaded
+            if '__correlationrules__' not in self.config or not self.config.get('__correlationrules__'):
+                try:
+                    from spiderfoot.correlation.rule_loader import RuleLoader
+                    import os
+
+                    # Determine correlations directory
+                    script_dir = os.path.dirname(os.path.abspath(__file__))
+                    correlations_dir = os.path.join(script_dir, 'correlations')
+
+                    # Try alternate location if primary doesn't exist
+                    if not os.path.exists(correlations_dir):
+                        correlations_dir = '/correlations'
+
+                    if os.path.exists(correlations_dir):
+                        loader = RuleLoader(correlations_dir)
+                        rules = loader.load_rules()
+                        errors = loader.get_errors()
+
+                        if errors:
+                            for fname, err in errors:
+                                self.log.warning(f"Failed to load correlation rule {fname}: {err}")
+
+                        self.config['__correlationrules__'] = rules
+                        self.log.info(f"Loaded {len(rules)} correlation rules from {correlations_dir}")
+                    else:
+                        self.log.warning(f"Correlations directory not found at {correlations_dir}, using empty rules")
+                        self.config['__correlationrules__'] = []
+                except Exception as e:
+                    self.log.error(f"Failed to load correlation rules: {e}", exc_info=True)
+                    self.config['__correlationrules__'] = []
             
             # Validate modules structure - ensure it's a dict
             if '__modules__' in self.config:
