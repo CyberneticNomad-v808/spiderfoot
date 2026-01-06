@@ -140,8 +140,16 @@ class WorkspaceEndpoints:
         self.log.debug(f"[MULTISCAN] Input parameters - targets: {targets}, modules: {modules}, prefix: {scan_name_prefix}")
         try:
             ws = SpiderFootWorkspace(self.config, workspace_id=workspace_id)
-            target_list = [t.strip() for t in targets.split(',') if t.strip()]
-            module_list = [m.strip() for m in modules.split(',') if m.strip()]
+            # Parse targets and modules as JSON (they could be JSON strings or already parsed)
+            if isinstance(targets, str):
+                target_list = json.loads(targets)
+            else:
+                target_list = targets
+
+            if isinstance(modules, str):
+                module_list = json.loads(modules)
+            else:
+                module_list = modules
             # Get logging queue from the parent WebUiRoutes class
             logging_queue = getattr(self, 'loggingQueue', None)
             results = ws.start_multiscan(target_list, module_list, scan_name_prefix, enable_correlation, logging_queue)
@@ -193,11 +201,11 @@ class WorkspaceEndpoints:
     def workspacedetails(self, workspace_id):
         try:
             ws = SpiderFootWorkspace(self.config, workspace_id=workspace_id)
-            
+
             # Ensure workspace has required attributes
             if not hasattr(ws, 'name') or not ws.name:
                 return f"Error: Workspace {workspace_id} not found or has no name"
-            
+
             # Generate CSRF token for the session
             csrf_token = None
             try:
@@ -208,14 +216,14 @@ class WorkspaceEndpoints:
             except Exception as e:
                 self.log.warning(f"Could not generate CSRF token: {e}")
                 csrf_token = "disabled"
-            
+
             # Load scans for the workspace
             scan_details = []
             try:
-                scan_details = ws.get_scans()
+                scan_details = ws.get_scan_details()
             except Exception as e:
                 self.log.warning(f"Could not load scans for workspace {workspace_id}: {e}")
-            
+
             # Use the template
             templ = Template(filename='spiderfoot/templates/workspace_details.tmpl', lookup=self.lookup)
             return templ.render(
@@ -226,6 +234,7 @@ class WorkspaceEndpoints:
                 csrf_token=csrf_token
             )
         except Exception as e:
+            self.log.error(f"Error loading workspace details for {workspace_id}: {e}", exc_info=True)
             return f"Error loading workspace details: {str(e)}"
 
     @cherrypy.expose

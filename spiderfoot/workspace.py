@@ -242,13 +242,27 @@ class SpiderFootWorkspace:
                 raise ValueError(f"Workspace {self.workspace_id} not found")
             
             workspace_data = result
-            self.name = workspace_data[1]
-            self.description = workspace_data[2] or ""
-            self.created_time = workspace_data[3]
-            self.modified_time = workspace_data[4]
-            self.targets = json.loads(workspace_data[5] or "[]")
-            self.scans = json.loads(workspace_data[6] or "[]")
-            self.metadata = json.loads(workspace_data[7] or "{}")
+
+            # Handle both dict-like (DictCursor/DictRow) and tuple/list results
+            # DictRow has keys() method but may not be instance of dict
+            if hasattr(workspace_data, 'keys'):
+                # Dict-like access (DictRow, dict, etc.)
+                self.name = workspace_data['name']
+                self.description = workspace_data.get('description') or ""
+                self.created_time = workspace_data['created_time']
+                self.modified_time = workspace_data['modified_time']
+                self.targets = json.loads(workspace_data.get('targets') or "[]")
+                self.scans = json.loads(workspace_data.get('scans') or "[]")
+                self.metadata = json.loads(workspace_data.get('metadata') or "{}")
+            else:
+                # Tuple/list access
+                self.name = workspace_data[1]
+                self.description = workspace_data[2] or ""
+                self.created_time = workspace_data[3]
+                self.modified_time = workspace_data[4]
+                self.targets = json.loads(workspace_data[5] or "[]")
+                self.scans = json.loads(workspace_data[6] or "[]")
+                self.metadata = json.loads(workspace_data[7] or "{}")
             
             self.log.info(f"Loaded workspace {self.workspace_id}: {self.name}")
             
@@ -609,6 +623,56 @@ class SpiderFootWorkspace:
     def get_scan_ids(self) -> List[str]:
         """Get list of scan IDs in workspace."""
         return [scan['scan_id'] for scan in self.scans]
+
+    def get_scan_details(self) -> List[dict]:
+        """Get full scan details from database for all scans in workspace."""
+        scan_ids = self.get_scan_ids()
+        if not scan_ids:
+            return []
+
+        try:
+            ph = self.db._placeholder()
+            placeholders = ', '.join([ph] * len(scan_ids))
+            query = f"""
+                SELECT guid, name, seed_target, created, started, ended, status
+                FROM tbl_scan_instance
+                WHERE guid IN ({placeholders})
+                ORDER BY created DESC
+            """
+
+            with self.db.dbhLock:
+                self.db.dbh.execute(query, scan_ids)
+                results = self.db.dbh.fetchall()
+
+            scan_details = []
+            for row in results:
+                # Handle both dict-like (DictRow) and tuple results
+                if hasattr(row, 'keys'):
+                    scan_details.append({
+                        'scan_id': row['guid'],
+                        'name': row['name'],
+                        'target': row['seed_target'],
+                        'created': row.get('created', 0),
+                        'started': row.get('started', 0),
+                        'ended': row.get('ended', 0),
+                        'status': row['status']
+                    })
+                else:
+                    scan_details.append({
+                        'scan_id': row[0],
+                        'name': row[1],
+                        'target': row[2],
+                        'created': row[3] or 0,
+                        'started': row[4] or 0,
+                        'ended': row[5] or 0,
+                        'status': row[6]
+                    })
+
+            return scan_details
+
+        except Exception as e:
+            self.log.error(f"Failed to get scan details: {e}")
+            return []
 
     def remove_target(self, target_id: str) -> bool:
         """Remove target from workspace.
