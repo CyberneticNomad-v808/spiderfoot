@@ -57,31 +57,33 @@ log_error() {
     echo -e "${RED}[ERROR]${NC} $1"
 }
 
-# Set safe database defaults to prevent hanging
+# Validate and display database configuration
 setup_safe_database_env() {
-    # Default to SQLite if no database type is set
-    if [[ -z "${SF_DB_TYPE:-}" ]]; then
-        export SF_DB_TYPE="sqlite"
-        export SF_DB_PATH="${PROJECT_ROOT}/test_spiderfoot.db"
-        log_info "Database: SQLite (default safe mode)"
-    elif [[ "${SF_DB_TYPE}" == "sqlite" ]]; then
-        export SF_DB_PATH="${SF_DB_PATH:-${PROJECT_ROOT}/test_spiderfoot.db}"
-        log_info "Database: SQLite - ${SF_DB_PATH}"
-    elif [[ "${SF_DB_TYPE}" == "postgresql" ]]; then
-        log_info "Database: PostgreSQL - ${SF_PG_USER:-spiderfoot}@${SF_PG_HOST:-localhost}:${SF_PG_PORT:-5432}/${SF_PG_DB:-spiderfoot_test}"
+    # PostgreSQL-only configuration (SQLite support removed in bd8df866)
+    # Require explicit configuration - no fallbacks
+
+    if [[ -z "${SPIDERFOOT_DB_TYPE:-}" ]]; then
+        log_fatal "SPIDERFOOT_DB_TYPE not set. Run option 6 to configure or set environment variables." 2
     fi
-    
-    # Set SpiderFoot environment variables
-    export SPIDERFOOT_DB_TYPE="${SF_DB_TYPE}"
-    if [[ "${SF_DB_TYPE}" == "sqlite" ]]; then
-        export SPIDERFOOT_DB_PATH="${SF_DB_PATH}"
-    elif [[ "${SF_DB_TYPE}" == "postgresql" ]]; then
-        export SPIDERFOOT_PG_HOST="${SF_PG_HOST:-localhost}"
-        export SPIDERFOOT_PG_PORT="${SF_PG_PORT:-5432}"
-        export SPIDERFOOT_PG_DB="${SF_PG_DB:-spiderfoot_test}"
-        export SPIDERFOOT_PG_USER="${SF_PG_USER:-spiderfoot}"
-        export SPIDERFOOT_PG_PASS="${SF_PG_PASS:-}"
+
+    if [[ -z "${SPIDERFOOT_DB_HOST:-}" ]]; then
+        log_fatal "SPIDERFOOT_DB_HOST not set. Run option 6 to configure or set environment variables." 2
     fi
+
+    if [[ -z "${SPIDERFOOT_DB_PORT:-}" ]]; then
+        log_fatal "SPIDERFOOT_DB_PORT not set. Run option 6 to configure or set environment variables." 2
+    fi
+
+    if [[ -z "${SPIDERFOOT_DB_NAME:-}" ]]; then
+        log_fatal "SPIDERFOOT_DB_NAME not set. Run option 6 to configure or set environment variables." 2
+    fi
+
+    if [[ -z "${SPIDERFOOT_DB_USER:-}" ]]; then
+        log_fatal "SPIDERFOOT_DB_USER not set. Run option 6 to configure or set environment variables." 2
+    fi
+
+    log_info "Database: PostgreSQL - ${SPIDERFOOT_DB_USER}@${SPIDERFOOT_DB_HOST}:${SPIDERFOOT_DB_PORT}/${SPIDERFOOT_DB_NAME}"
+    log_info "Note: Unit tests mock database connections (conftest.py patches psycopg2.connect)"
 }
 
 ##
@@ -89,90 +91,88 @@ setup_safe_database_env() {
 ##
 configure_test_database() {
     header "Test Database Configuration"
-    
-    log_info "SpiderFoot supports SQLite (default) and PostgreSQL databases."
+
+    log_info "SpiderFoot uses PostgreSQL database (SQLite support removed in bd8df866)."
     echo ""
-    echo "For unit tests, SQLite is recommended (faster, no setup required)."
-    echo "For production testing, PostgreSQL may be preferred."
+    echo "For unit tests, database connections are mocked by conftest.py."
+    echo "For integration tests, a real PostgreSQL instance is required."
     echo ""
-    
+
     echo "Database configuration options:"
-    echo "  1) Use SQLite (recommended for testing)"
-    echo "  2) Configure PostgreSQL"
+    echo "  1) Use default test settings (recommended - matches conftest.py)"
+    echo "  2) Configure custom PostgreSQL connection"
     echo "  3) Show current database config"
-    echo "  4) Skip database tests (mock mode)"
-    echo "  5) Reset to defaults (SQLite)"
     echo ""
-    echo -n "Select option [1-5]: "
+    echo -n "Select option [1-3]: "
     read -r db_choice
-    
+
     case "$db_choice" in
-        1|5)
-            export SF_DB_TYPE="sqlite"
-            export SF_DB_PATH="${PROJECT_ROOT}/test_spiderfoot.db"
-            # Clear any PostgreSQL settings
-            unset SF_PG_HOST SF_PG_PORT SF_PG_DB SF_PG_USER SF_PG_PASS 2>/dev/null || true
-            log_info "Configured for SQLite testing database"
+        1)
+            export SPIDERFOOT_DB_TYPE="postgresql"
+            export SPIDERFOOT_DB_HOST="localhost"
+            export SPIDERFOOT_DB_PORT="5432"
+            export SPIDERFOOT_DB_NAME="spiderfoot_test"
+            export SPIDERFOOT_DB_USER="spiderfoot"
+            export SPIDERFOOT_DB_PASSWORD=""
+            log_info "Configured for default test database (localhost:5432/spiderfoot_test)"
+            log_info "Unit tests will mock connections; integration tests need real PostgreSQL"
             ;;
         2)
             echo -n "PostgreSQL host [localhost]: "
             read -r pg_host
             pg_host=${pg_host:-localhost}
-            
+
             echo -n "PostgreSQL port [5432]: "
             read -r pg_port
             pg_port=${pg_port:-5432}
-            
+
             echo -n "Database name [spiderfoot_test]: "
             read -r pg_db
             pg_db=${pg_db:-spiderfoot_test}
-            
+
             echo -n "Username [spiderfoot]: "
             read -r pg_user
             pg_user=${pg_user:-spiderfoot}
-            
+
             echo -n "Password: "
             read -rs pg_pass
             echo ""
-            
+
             # Test PostgreSQL connection before setting
             log_info "Testing PostgreSQL connection..."
             if python3 -c "import psycopg2; psycopg2.connect(host='$pg_host', port='$pg_port', database='$pg_db', user='$pg_user', password='$pg_pass')" 2>/dev/null; then
-                export SF_DB_TYPE="postgresql"
-                export SF_PG_HOST="$pg_host"
-                export SF_PG_PORT="$pg_port"
-                export SF_PG_DB="$pg_db"
-                export SF_PG_USER="$pg_user"
-                export SF_PG_PASS="$pg_pass"
+                export SPIDERFOOT_DB_TYPE="postgresql"
+                export SPIDERFOOT_DB_HOST="$pg_host"
+                export SPIDERFOOT_DB_PORT="$pg_port"
+                export SPIDERFOOT_DB_NAME="$pg_db"
+                export SPIDERFOOT_DB_USER="$pg_user"
+                export SPIDERFOOT_DB_PASSWORD="$pg_pass"
                 log_info "PostgreSQL connection successful: $pg_user@$pg_host:$pg_port/$pg_db"
             else
-                log_warn "PostgreSQL connection failed, falling back to SQLite"
-                export SF_DB_TYPE="sqlite"
-                export SF_DB_PATH="${PROJECT_ROOT}/test_spiderfoot.db"
+                log_warn "PostgreSQL connection failed, using defaults (tests will be mocked)"
+                export SPIDERFOOT_DB_TYPE="postgresql"
+                export SPIDERFOOT_DB_HOST="localhost"
+                export SPIDERFOOT_DB_PORT="5432"
+                export SPIDERFOOT_DB_NAME="spiderfoot_test"
+                export SPIDERFOOT_DB_USER="spiderfoot"
+                export SPIDERFOOT_DB_PASSWORD=""
             fi
             ;;
         3)
             echo "Current database configuration:"
-            echo "  DB_TYPE: ${SF_DB_TYPE:-sqlite (default)}"
-            echo "  DB_PATH: ${SF_DB_PATH:-not set}"
-            echo "  PG_HOST: ${SF_PG_HOST:-not set}"
-            echo "  PG_PORT: ${SF_PG_PORT:-not set}"
-            echo "  PG_DB: ${SF_PG_DB:-not set}"
-            echo "  PG_USER: ${SF_PG_USER:-not set}"
-            echo "  MOCK_DB: ${SF_MOCK_DB:-false}"
-            ;;
-        4)
-            export SF_MOCK_DB="true"
-            export SF_DB_TYPE="sqlite"  # Set valid type for mock mode
-            log_info "Configured to mock database operations in tests"
+            echo "  SPIDERFOOT_DB_TYPE: ${SPIDERFOOT_DB_TYPE:-(not set)}"
+            echo "  SPIDERFOOT_DB_HOST: ${SPIDERFOOT_DB_HOST:-(not set)}"
+            echo "  SPIDERFOOT_DB_PORT: ${SPIDERFOOT_DB_PORT:-(not set)}"
+            echo "  SPIDERFOOT_DB_NAME: ${SPIDERFOOT_DB_NAME:-(not set)}"
+            echo "  SPIDERFOOT_DB_USER: ${SPIDERFOOT_DB_USER:-(not set)}"
+            echo "  SPIDERFOOT_DB_PASSWORD: ${SPIDERFOOT_DB_PASSWORD:+***set***}"
+            [[ -z "${SPIDERFOOT_DB_PASSWORD:-}" ]] && echo "                      (not set)"
             ;;
         *)
-            log_warn "Invalid selection, setting SQLite defaults"
-            export SF_DB_TYPE="sqlite"
-            export SF_DB_PATH="${PROJECT_ROOT}/test_spiderfoot.db"
+            log_error "Invalid selection"
             ;;
     esac
-    
+
     echo ""
     echo "Press Enter to continue..."
     read -r
@@ -181,32 +181,26 @@ configure_test_database() {
 run_unit_tests() {
     header "Running Unit Tests"
     log_info "Running unit tests only..."
-    
+
     cd "${PROJECT_ROOT}" || { log_error "Cannot change to project root"; exit 1; }
     setup_safe_database_env
-    
+
     local pytest_args=("test/unit/" "--tb=short" "--maxfail=10")
-    
-    # Skip PostgreSQL tests if not configured or if SQLite is configured
-    if [[ "${SF_DB_TYPE:-sqlite}" != "postgresql" ]]; then
-        pytest_args+=("--ignore=test/unit/modules/test_sfp__stor_db.py")
-        log_info "Skipping PostgreSQL storage tests (using ${SF_DB_TYPE:-sqlite})"
-    fi
 
     if [[ "${verbose_mode}" == true ]]; then
         pytest_args+=("-v")
     fi
-    
+
     # Add user arguments
     if [[ $# -gt 0 ]]; then
         pytest_args+=("$@")
     fi
-    
+
     log_info "Press Ctrl+C to interrupt tests"
-    
+
     if command -v pytest >/dev/null 2>&1; then
         pytest "${pytest_args[@]}"
-    else  
+    else
         python3 -m pytest "${pytest_args[@]}"
     fi
 }
@@ -217,13 +211,18 @@ run_unit_tests() {
 show_menu() {
     clear
     header "SpiderFoot Test Runner Menu"
-    
+
     # Show current database configuration
-    echo -e "${BLUE}Current Database:${NC} ${SF_DB_TYPE:-sqlite} ${SF_MOCK_DB:+(mocked)}"
+    if [[ -n "${SPIDERFOOT_DB_NAME:-}" ]]; then
+        echo -e "${BLUE}Database:${NC} PostgreSQL ${SPIDERFOOT_DB_USER}@${SPIDERFOOT_DB_HOST}:${SPIDERFOOT_DB_PORT}/${SPIDERFOOT_DB_NAME}"
+        echo -e "${BLUE}Note:${NC} Unit tests use mocked connections (conftest.py)"
+    else
+        echo -e "${RED}Database:${NC} NOT CONFIGURED - Select option 6 to configure"
+    fi
     echo ""
-    
+
     echo -e "${GREEN}Available Test Commands:${NC}"
-    echo "  1) Unit Tests Only          (test/unit/ - fast, no external deps)"
+    echo "  1) Unit Tests Only          (test/unit/ - fast, mocked DB)"
     echo "  2) Standard Tests           (excludes module integration)"
     echo "  3) All Tests                (includes everything - may be slow)"
     echo "  4) Module Integration Tests (external API tests)"

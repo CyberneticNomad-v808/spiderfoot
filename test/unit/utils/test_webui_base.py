@@ -178,14 +178,17 @@ class EnhancedWebUITestBase(helper.CPWebCase, TestModuleBase):
     
     def _setup_mocks(self):
         """Setup common mocks to avoid real resource allocation."""
+        # NOTE: psycopg2.connect is already mocked in conftest.py BEFORE any imports
+        # This ensures DbCore.__init__ never attempts a real database connection
+
         self.db_patcher = patch('sfwebui.SpiderFootDb')
         self.sf_patcher = patch('sfwebui.SpiderFoot')
         self.log_patcher = patch('sfwebui.logListenerSetup')
-        
+
         self.mock_db = self.db_patcher.start()
         self.mock_sf = self.sf_patcher.start()
         self.mock_log = self.log_patcher.start()
-        
+
         # Configure mock database instance
         self.mock_db_instance = MagicMock()
         self.mock_db.return_value = self.mock_db_instance

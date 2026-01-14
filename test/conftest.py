@@ -10,15 +10,43 @@ from _pytest.runner import runtestprotocol
 from unittest.mock import MagicMock, patch
 
 # CRITICAL: Mock psycopg2.connect BEFORE any database code imports
+# This mock must handle cursor_factory parameter passed by db_core.py
 mock_conn = MagicMock()
 mock_cursor = MagicMock()
-mock_conn.cursor.return_value = mock_cursor
+
+# Handle both direct cursor() calls and cursor(cursor_factory=...) calls
+def mock_cursor_method(cursor_factory=None):
+    """Return mock cursor, accepting optional cursor_factory parameter."""
+    return mock_cursor
+
+mock_conn.cursor = mock_cursor_method
 mock_cursor.fetchone.return_value = None
 mock_cursor.fetchall.return_value = []
+mock_cursor.fetchmany.return_value = []
 mock_cursor.execute.return_value = None
+mock_cursor.executemany.return_value = None
+mock_cursor.executescript.return_value = None
+mock_cursor.close.return_value = None
+mock_cursor.description = []
+mock_cursor.rowcount = 0
+mock_cursor.commit = MagicMock()
+mock_cursor.rollback = MagicMock()
+mock_conn.commit = MagicMock()
+mock_conn.rollback = MagicMock()
+mock_conn.close = MagicMock()
+mock_conn.closed = False
 
+# Mock psycopg2.extras.DictCursor factory (used in db_core.py line 757)
+def mock_dict_cursor_factory():
+    """Mock cursor factory that returns mock cursor."""
+    return mock_cursor
+
+# Patch at both module level AND in psycopg2 package to ensure interception
 psycopg2_connect_patcher = patch('psycopg2.connect', return_value=mock_conn)
+psycopg2_extras_patcher = patch('psycopg2.extras.DictCursor', side_effect=mock_dict_cursor_factory)
+
 psycopg2_connect_patcher.start()
+psycopg2_extras_patcher.start()
 
 # CRITICAL: Set required environment variables BEFORE any SpiderFoot imports
 # These are required by sfp__stor_db which reads os.environ at class definition time

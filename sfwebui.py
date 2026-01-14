@@ -132,7 +132,9 @@ class SpiderFootWebUi(WebUiRoutes):
                     self.config[key] = default_value
 
             # Load correlation rules from filesystem if not already loaded
+            self.log.info(f"Checking correlation rules - in config: {'__correlationrules__' in self.config}, value: {len(self.config.get('__correlationrules__', []))} rules")
             if '__correlationrules__' not in self.config or not self.config.get('__correlationrules__'):
+                self.log.info("Loading correlation rules from filesystem...")
                 try:
                     from spiderfoot.correlation.rule_loader import RuleLoader
 

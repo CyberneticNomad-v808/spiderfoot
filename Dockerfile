@@ -91,14 +91,6 @@ COPY --from=builder /opt/venv /opt/venv
 # Copy tools from builder
 COPY --from=builder /tools /tools
 
-# Set up environment with virtual environment
-ENV SPIDERFOOT_DATA=/home/spiderfoot/data \
-    SPIDERFOOT_LOGS=/home/spiderfoot/logs \
-    SPIDERFOOT_CACHE=/home/spiderfoot/cache \
-    PATH="/opt/venv/bin:/tools/bin:$PATH" \
-    PYTHONPATH="/home/spiderfoot:/home/spiderfoot/modules" \
-    VIRTUAL_ENV="/opt/venv"
-
 # Create user and directories
 RUN addgroup --system spiderfoot && \
     adduser --system --ingroup spiderfoot --home /home/spiderfoot \
@@ -107,6 +99,16 @@ RUN addgroup --system spiderfoot && \
     # Do NOT chown bind-mounted folders here; this causes errors if the host directory is mounted at runtime.
     # Only set ownership for files inside the image.
     chown -R spiderfoot:spiderfoot /home/spiderfoot
+
+
+# Set up environment with virtual environment
+ENV SPIDERFOOT_DATA=/home/spiderfoot/data \
+    SPIDERFOOT_LOGS=/home/spiderfoot/logs \
+    SPIDERFOOT_CACHE=/home/spiderfoot/cache \
+    PATH="/opt/venv/bin:/tools/bin:$PATH" \
+    PYTHONPATH="/home/spiderfoot:/home/spiderfoot/modules" \
+    VIRTUAL_ENV="/opt/venv"
+
 
 # Enable NMAP capabilities
 RUN setcap cap_net_raw,cap_net_admin=eip /usr/bin/nmap
@@ -120,7 +122,7 @@ COPY --chown=spiderfoot:spiderfoot . .
 # Inject build metadata
 ARG BUILD_DATE
 ARG BUILD_COMMIT
-RUN echo "${BUILD_DATE:-unknown}-${BUILD_COMMIT:-unknown}" > /home/spiderfoot/BUILD_INFO && \
+RUN echo "${BUILD_DATE}-${BUILD_COMMIT}" > /home/spiderfoot/BUILD_INFO && \
     chown spiderfoot:spiderfoot /home/spiderfoot/BUILD_INFO
 
 # Copy and set up the startup script

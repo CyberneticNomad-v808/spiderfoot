@@ -674,6 +674,140 @@ class SpiderFootWorkspace:
             self.log.error(f"Failed to get scan details: {e}")
             return []
 
+    def get_scan_results(self, scan_id: str = None, event_type: str = None, limit: int = 100) -> List[dict]:
+        """Get scan results for workspace scans.
+
+        Args:
+            scan_id: Optional specific scan ID to filter by
+            event_type: Optional event type to filter by
+            limit: Maximum number of results to return
+
+        Returns:
+            List of scan results
+        """
+        scan_ids = [scan_id] if scan_id else self.get_scan_ids()
+        if not scan_ids:
+            return []
+
+        try:
+            ph = self.db._placeholder()
+            placeholders = ', '.join([ph] * len(scan_ids))
+
+            query = f"""
+                SELECT scan_instance_id, hash, type, generated, confidence,
+                       visibility, risk, module, data, false_positive, source_event_hash
+                FROM tbl_scan_results
+                WHERE scan_instance_id IN ({placeholders})
+            """
+
+            params = list(scan_ids)
+
+            if event_type:
+                query += f" AND type = {ph}"
+                params.append(event_type)
+
+            query += " ORDER BY generated DESC"
+            query += f" LIMIT {ph}"
+            params.append(limit)
+
+            with self.db.dbhLock:
+                self.db.dbh.execute(query, params)
+                results = self.db.dbh.fetchall()
+
+            scan_results = []
+            for row in results:
+                if hasattr(row, 'keys'):
+                    scan_results.append({
+                        'scan_id': row['scan_instance_id'],
+                        'hash': row['hash'],
+                        'type': row['type'],
+                        'generated': row.get('generated', 0),
+                        'confidence': row.get('confidence', 100),
+                        'visibility': row.get('visibility', 100),
+                        'risk': row.get('risk', 0),
+                        'module': row['module'],
+                        'data': row.get('data', ''),
+                        'false_positive': row.get('false_positive', 0),
+                        'source_event_hash': row.get('source_event_hash', 'ROOT')
+                    })
+                else:
+                    scan_results.append({
+                        'scan_id': row[0],
+                        'hash': row[1],
+                        'type': row[2],
+                        'generated': row[3] or 0,
+                        'confidence': row[4] or 100,
+                        'visibility': row[5] or 100,
+                        'risk': row[6] or 0,
+                        'module': row[7],
+                        'data': row[8] or '',
+                        'false_positive': row[9] or 0,
+                        'source_event_hash': row[10] or 'ROOT'
+                    })
+
+            return scan_results
+
+        except Exception as e:
+            self.log.error(f"Failed to get scan results: {e}")
+            return []
+
+    def get_cross_scan_correlations(self) -> List[dict]:
+        """Get cross-scan correlations for workspace scans.
+
+        Returns:
+            List of correlation results
+        """
+        scan_ids = self.get_scan_ids()
+        if not scan_ids:
+            return []
+
+        try:
+            ph = self.db._placeholder()
+            placeholders = ', '.join([ph] * len(scan_ids))
+
+            query = f"""
+                SELECT id, scan_instance_id, title, rule_risk, rule_id,
+                       rule_name, rule_descr, rule_logic
+                FROM tbl_scan_correlation_results
+                WHERE scan_instance_id IN ({placeholders})
+                ORDER BY rule_risk DESC, title
+            """
+
+            with self.db.dbhLock:
+                self.db.dbh.execute(query, scan_ids)
+                results = self.db.dbh.fetchall()
+
+            correlations = []
+            for row in results:
+                if hasattr(row, 'keys'):
+                    correlations.append({
+                        'id': row['id'],
+                        'scan_id': row['scan_instance_id'],
+                        'title': row['title'],
+                        'risk': row['rule_risk'],
+                        'rule_id': row['rule_id'],
+                        'rule_name': row['rule_name'],
+                        'description': row['rule_descr'],
+                        'logic': row['rule_logic']
+                    })
+                else:
+                    correlations.append({
+                        'id': row[0],
+                        'scan_id': row[1],
+                        'title': row[2],
+                        'risk': row[3],
+                        'rule_id': row[4],
+                        'rule_name': row[5],
+                        'description': row[6],
+                        'logic': row[7]
+                    })
+
+            return correlations
+
+        except Exception as e:
+            self.log.error(f"Failed to get cross-scan correlations: {e}")
+            return []
+
     def remove_target(self, target_id: str) -> bool:
         """Remove target from workspace.
         

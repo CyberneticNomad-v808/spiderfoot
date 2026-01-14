@@ -84,6 +84,12 @@ class SettingsEndpoints:
             try:
                 # allopts is JSON string from the form
                 new_config = json.loads(allopts)
+                # DEBUG: Log what we're saving for db_type
+                db_type_key = 'sfp__stor_db:db_type'
+                if db_type_key in new_config:
+                    print(f"[DEBUG] Saving db_type: {new_config[db_type_key]}")
+                else:
+                    print(f"[DEBUG] db_type NOT in new_config. Keys: {[k for k in new_config.keys() if 'stor_db' in k]}")
                 # Convert booleans to "1"/"0" strings for database
                 for key in new_config:
                     if isinstance(new_config[key], bool):

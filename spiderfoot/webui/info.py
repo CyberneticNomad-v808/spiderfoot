@@ -28,14 +28,33 @@ class InfoEndpoints:
         # Handle both dict and list formats for backward compatibility
         if isinstance(modules_data, dict):
             # Convert dict to list format expected by frontend
+            # modules_data comes from loadModulesAsDict() which returns dicts with keys:
+            # 'name', 'descr', 'cats', 'labels', 'provides', 'consumes', 'opts', 'optdescs', 'meta', 'group'
             for mod_name, mod_obj in modules_data.items():
-                if hasattr(mod_obj, '__doc__') and hasattr(mod_obj, 'opts'):
+                if isinstance(mod_obj, dict):
+                    # mod_obj is a dictionary from loadModulesAsDict
+                    mod_dict = {
+                        'name': mod_name,
+                        'descr': mod_obj.get('descr', '') or mod_obj.get('name', mod_name),
+                        'provides': mod_obj.get('provides', []),
+                        'consumes': mod_obj.get('consumes', []),
+                        'opts': mod_obj.get('opts', {}),
+                        'group': mod_obj.get('group', []),  # useCases from meta
+                        'cats': mod_obj.get('cats', []),    # categories
+                        'labels': mod_obj.get('labels', []) # flags
+                    }
+                    modlist.append(mod_dict)
+                elif hasattr(mod_obj, '__doc__') and hasattr(mod_obj, 'opts'):
+                    # mod_obj is an actual module class (legacy support)
                     mod_dict = {
                         'name': mod_name,
                         'descr': mod_obj.__doc__ or 'No description available',
                         'provides': getattr(mod_obj, 'produces', []),
                         'consumes': getattr(mod_obj, 'watchedEvents', []),
-                        'opts': getattr(mod_obj, 'opts', {})
+                        'opts': getattr(mod_obj, 'opts', {}),
+                        'group': getattr(mod_obj, 'meta', {}).get('useCases', []),
+                        'cats': getattr(mod_obj, 'meta', {}).get('categories', []),
+                        'labels': getattr(mod_obj, 'meta', {}).get('flags', [])
                     }
                     modlist.append(mod_dict)
                 else:
@@ -45,7 +64,10 @@ class InfoEndpoints:
                         'descr': 'Module description not available',
                         'provides': [],
                         'consumes': [],
-                        'opts': {}
+                        'opts': {},
+                        'group': [],
+                        'cats': [],
+                        'labels': []
                     })
         else:
             # Handle list format (original)

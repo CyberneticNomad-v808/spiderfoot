@@ -131,7 +131,10 @@ class ModuleManager:
         if correlations_dir is None:
             script_dir = os.path.dirname(os.path.abspath(__file__))
             correlations_dir = os.path.join(script_dir, '../../correlations')
-        
+
+        print(f"[CORRELATION DEBUG] Attempting to load rules from: {correlations_dir}")
+        print(f"[CORRELATION DEBUG] Directory exists: {os.path.exists(correlations_dir)}")
+
         try:
             from spiderfoot.correlation.rule_loader import RuleLoader
             
@@ -148,10 +151,12 @@ class ModuleManager:
                 correlation_rules = rules
                 
             self.correlation_rules = correlation_rules
+            print(f"[CORRELATION DEBUG] Successfully loaded {len(correlation_rules)} rules")
             self.log.info(f"Loaded {len(correlation_rules)} correlation rules")
             return correlation_rules
-            
+
         except Exception as e:
+            print(f"[CORRELATION DEBUG] Exception caught: {e}")
             self.log.warning(f"Failed to load correlation rules: {e}")
             self.correlation_rules = []
             return []

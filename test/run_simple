@@ -25,43 +25,57 @@ log_warn() {
     echo -e "${YELLOW}[WARN]${NC} $1"
 }
 
-# Set safe database defaults to prevent hanging
+# Validate database configuration
 setup_safe_database_env() {
-    # Force SQLite mode to avoid PostgreSQL connection attempts
-    export SF_DB_TYPE="sqlite"
-    export SPIDERFOOT_DB_TYPE="sqlite" 
-    export SF_DB_PATH="${PROJECT_ROOT}/test_spiderfoot.db"
-    export SPIDERFOOT_DB_PATH="${PROJECT_ROOT}/test_spiderfoot.db"
-    
-    # Clear PostgreSQL variables that cause hanging
-    unset SF_PG_HOST SF_PG_PORT SF_PG_DB SF_PG_USER SF_PG_PASS 2>/dev/null || true
-    unset SPIDERFOOT_PG_HOST SPIDERFOOT_PG_PORT SPIDERFOOT_PG_DB 2>/dev/null || true
-    unset SPIDERFOOT_PG_USER SPIDERFOOT_PG_PASS 2>/dev/null || true
-    
-    log_info "Database: SQLite (safe mode)"
+    # PostgreSQL-only configuration (SQLite support removed in bd8df866)
+    # Require explicit configuration - no fallbacks
+
+    local missing=()
+    [[ -z "${SPIDERFOOT_DB_TYPE:-}" ]] && missing+=("SPIDERFOOT_DB_TYPE")
+    [[ -z "${SPIDERFOOT_DB_HOST:-}" ]] && missing+=("SPIDERFOOT_DB_HOST")
+    [[ -z "${SPIDERFOOT_DB_PORT:-}" ]] && missing+=("SPIDERFOOT_DB_PORT")
+    [[ -z "${SPIDERFOOT_DB_NAME:-}" ]] && missing+=("SPIDERFOOT_DB_NAME")
+    [[ -z "${SPIDERFOOT_DB_USER:-}" ]] && missing+=("SPIDERFOOT_DB_USER")
+
+    if [[ ${#missing[@]} -gt 0 ]]; then
+        echo -e "${RED}[ERROR]${NC} Missing required environment variables: ${missing[*]}"
+        echo ""
+        echo "Set environment variables:"
+        echo "  export SPIDERFOOT_DB_TYPE=postgresql"
+        echo "  export SPIDERFOOT_DB_HOST=localhost"
+        echo "  export SPIDERFOOT_DB_PORT=5432"
+        echo "  export SPIDERFOOT_DB_NAME=spiderfoot_test"
+        echo "  export SPIDERFOOT_DB_USER=spiderfoot"
+        echo "  export SPIDERFOOT_DB_PASSWORD=''"
+        echo ""
+        echo "Or use ./test/run for interactive configuration."
+        exit 2
+    fi
+
+    log_info "Database: PostgreSQL - ${SPIDERFOOT_DB_USER}@${SPIDERFOOT_DB_HOST}:${SPIDERFOOT_DB_PORT}/${SPIDERFOOT_DB_NAME}"
+    log_info "Note: Unit tests mock database connections (conftest.py patches psycopg2.connect)"
 }
 
 run_tests() {
     log_info "Running SpiderFoot unit tests..."
-    
+
     cd "${PROJECT_ROOT}" || exit 1
     setup_safe_database_env
-    
+
     local args=(
         "test/unit/"
-        "--tb=short" 
+        "--tb=short"
         "--maxfail=5"
-        "--ignore=test/unit/modules/test_sfp__stor_db.py"
     )
-    
+
     # Add user arguments
     args+=("$@")
-    
+
     log_info "Press Ctrl+C to interrupt tests"
-    
+
     if command -v pytest >/dev/null 2>&1; then
         pytest "${args[@]}"
-    else  
+    else
         python3 -m pytest "${args[@]}"
     fi
 }
