@@ -10,9 +10,37 @@ import secrets
 import time
 from functools import wraps
 from typing import Any, Dict, List, Optional, Tuple
+from dataclasses import dataclass
 
-import jwt
-from flask import g, jsonify, request
+# Conditional imports with graceful fallback
+try:
+    import jwt
+    HAS_JWT = True
+except ImportError:
+    HAS_JWT = False
+    jwt = None
+
+try:
+    from flask import g, jsonify, request
+    HAS_FLASK = True
+except ImportError:
+    HAS_FLASK = False
+    g = None
+    jsonify = None
+    request = None
+
+
+@dataclass
+class SignatureConfig:
+    """Configuration for request signature generation and validation.
+
+    Reduces positional arguments to meet pylint R0917 requirements.
+    """
+    method: str
+    url: str
+    payload: str = ''
+    timestamp: str = None
+    api_key: str = None
 
 
 class APISecurityManager:
@@ -58,6 +86,9 @@ class APISecurityManager:
         Returns:
             JWT API key
         """
+        if not HAS_JWT:
+            raise RuntimeError("PyJWT is not installed. Install with: pip install PyJWT")
+
         scopes = scopes or ['read']
         expires_in = expires_in or self.token_expiry
 
@@ -81,6 +112,9 @@ class APISecurityManager:
         Returns:
             Token claims if valid, None otherwise
         """
+        if not HAS_JWT:
+            return None
+
         try:
             payload = jwt.decode(
                 api_key,
@@ -124,27 +158,22 @@ class APISecurityManager:
 
         return False
 
-    def create_signature(self, method: str, url: str, payload: str = '',
-                        timestamp: str = None, api_key: str = None) -> str:
+    def create_signature(self, config: SignatureConfig) -> str:
         """Create request signature for additional security.
 
         Args:
-            method: HTTP method
-            url: Request URL
-            payload: Request payload
-            timestamp: Request timestamp
-            api_key: API key
+            config: SignatureConfig object with signature parameters
 
         Returns:
             HMAC signature
         """
-        timestamp = timestamp or str(int(time.time()))
+        timestamp = config.timestamp or str(int(time.time()))
 
         # Create string to sign
-        string_to_sign = f"{method}\n{url}\n{payload}\n{timestamp}"
+        string_to_sign = f"{config.method}\n{config.url}\n{config.payload}\n{timestamp}"
 
         # Use API key as HMAC key if provided, otherwise use secret
-        key = api_key.encode() if api_key else self.secret_key.encode()
+        key = config.api_key.encode() if config.api_key else self.secret_key.encode()
 
         signature = hmac.new(
             key,
@@ -154,37 +183,30 @@ class APISecurityManager:
 
         return signature
 
-    def validate_signature(self, signature: str, method: str, url: str,
-                          payload: str = '', timestamp: str = None,
-                          api_key: str = None, tolerance: int = 300) -> bool:
+    def validate_signature(self, signature: str, config: SignatureConfig,
+                          tolerance: int = 300) -> bool:
         """Validate request signature.
 
         Args:
             signature: Provided signature
-            method: HTTP method
-            url: Request URL
-            payload: Request payload
-            timestamp: Request timestamp
-            api_key: API key
+            config: SignatureConfig object with validation parameters
             tolerance: Time tolerance in seconds
 
         Returns:
             True if signature is valid
         """
-        if not timestamp:
+        if not config.timestamp:
             return False
 
         # Check timestamp tolerance
         current_time = int(time.time())
-        request_time = int(timestamp)
+        request_time = int(config.timestamp)
 
         if abs(current_time - request_time) > tolerance:
             return False
 
         # Generate expected signature
-        expected_signature = self.create_signature(
-            method, url, payload, timestamp, api_key
-        )
+        expected_signature = self.create_signature(config)
 
         # Constant-time comparison
         return hmac.compare_digest(signature, expected_signature)
@@ -437,6 +459,13 @@ def require_api_auth(required_scope: str = None):
     Args:
         required_scope: Required scope for the endpoint
     """
+    if not HAS_FLASK:
+        def dummy_decorator(f):
+            def decorated_function(*args, **kwargs):
+                raise RuntimeError("Flask is not installed. Install with: pip install Flask")
+            return decorated_function
+        return dummy_decorator
+
     def decorator(f):
         @wraps(f)
         def decorated_function(*args, **kwargs):

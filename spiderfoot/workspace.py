@@ -6,12 +6,13 @@ targets, and cross-correlations within a unified context.
 
 import json
 import logging
-import os
+import multiprocessing as mp
 import time
+import traceback
 import uuid
+from copy import deepcopy
 from datetime import datetime
-from pathlib import Path
-from typing import Dict, List, Optional, Any
+from typing import Any, Dict, List, Optional
 
 from spiderfoot import SpiderFootDb, SpiderFootHelpers
 
@@ -36,11 +37,11 @@ class SpiderFootWorkspace:
             config.update(db_config)
 
         self.db = SpiderFootDb(config, init=True)
-        self.log = logging.getLogger(f"spiderfoot.workspace")
-        
+        self.log = logging.getLogger("spiderfoot.workspace")
+
         # Ensure workspace table exists before any operations
         self._ensure_workspace_table()
-        
+
         if workspace_id:
             self.workspace_id = workspace_id
             self.load_workspace()
@@ -49,7 +50,7 @@ class SpiderFootWorkspace:
             self.name = name or f"Workspace_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
             self.created_time = time.time()
             self.modified_time = time.time()
-            self.description = ""            
+            self.description = ""
             self.targets = []
             self.scans = []
             self.metadata = {}
@@ -199,7 +200,7 @@ class SpiderFootWorkspace:
                             self.db.dbh.execute("ALTER TABLE tbl_workspaces ADD COLUMN IF NOT EXISTS workflows TEXT")
                         else:
                             self.db.dbh.execute("ALTER TABLE tbl_workspaces ADD COLUMN workflows TEXT")
-                    
+
                     # Insert workspace
                     if hasattr(self.db, 'db_type') and self.db.db_type == 'postgresql':
                         query = """
@@ -217,13 +218,13 @@ class SpiderFootWorkspace:
                         """
                     self.db.dbh.execute(query, list(workspace_data.values()))
                     self.db.conn.commit()
-                    
+
                 except Exception as e:
                     self.log.error(f"Failed to create workspace table/data: {e}")
                     raise
-            
+
             self.log.info(f"Created workspace {self.workspace_id}: {self.name}")
-            
+
         except Exception as e:
             self.log.error(f"Failed to create workspace: {e}")
             raise
@@ -237,10 +238,10 @@ class SpiderFootWorkspace:
             with self.db.dbhLock:
                 self.db.dbh.execute(query, [self.workspace_id])
                 result = self.db.dbh.fetchone()
-            
+
             if not result:
                 raise ValueError(f"Workspace {self.workspace_id} not found")
-            
+
             workspace_data = result
 
             # Handle both dict-like (DictCursor/DictRow) and tuple/list results
@@ -263,9 +264,9 @@ class SpiderFootWorkspace:
                 self.targets = json.loads(workspace_data[5] or "[]")
                 self.scans = json.loads(workspace_data[6] or "[]")
                 self.metadata = json.loads(workspace_data[7] or "{}")
-            
+
             self.log.info(f"Loaded workspace {self.workspace_id}: {self.name}")
-            
+
         except Exception as e:
             self.log.error(f"Failed to load workspace: {e}")
             raise
@@ -288,33 +289,33 @@ class SpiderFootWorkspace:
                 json.dumps(self.targets), json.dumps(self.scans),
                 json.dumps(self.metadata), self.workspace_id
             ]
-            
+
             with self.db.dbhLock:
                 self.db.dbh.execute(query, values)
                 self.db.conn.commit()
             self.log.info(f"Saved workspace {self.workspace_id}")
-            
+
         except Exception as e:
             self.log.error(f"Failed to save workspace: {e}")
             raise
 
     def add_target(self, target: str, target_type: str = None, metadata: dict = None) -> str:
         """Add target to workspace.
-        
+
         Args:
             target: Target value (domain, IP, etc.)
             target_type: Target type (optional, will be auto-detected)
             metadata: Additional target metadata
-            
+
         Returns:
             Target ID
         """
         if not target_type:
             target_type = SpiderFootHelpers.targetTypeFromString(target)
-            
+
         if not target_type:
             raise ValueError(f"Could not determine target type for: {target}")
-        
+
         target_id = f"tgt_{uuid.uuid4().hex[:8]}"
         target_data = {
             'target_id': target_id,
@@ -323,16 +324,16 @@ class SpiderFootWorkspace:
             'added_time': time.time(),
             'metadata': metadata or {}
         }
-        
+
         self.targets.append(target_data)
         self.save_workspace()
-        
+
         self.log.info(f"Added target {target} ({target_type}) to workspace {self.workspace_id}")
         return target_id
 
     def add_scan(self, scan_id: str, target_id: str = None, metadata: dict = None) -> None:
         """Add scan to workspace.
-        
+
         Args:
             scan_id: SpiderFoot scan ID
             target_id: Associated target ID (optional)
@@ -342,7 +343,7 @@ class SpiderFootWorkspace:
         scan_info = self.db.scanInstanceGet(scan_id)
         if not scan_info:
             raise ValueError(f"Scan {scan_id} not found")
-        
+
         scan_data = {
             'scan_id': scan_id,
             'target_id': target_id,
@@ -351,19 +352,19 @@ class SpiderFootWorkspace:
             'scan_target': scan_info[2],
             'metadata': metadata or {}
         }
-        
+
         self.scans.append(scan_data)
         self.save_workspace()
-        
+
         self.log.info(f"Added scan {scan_id} to workspace {self.workspace_id}")
 
     def import_single_scan(self, scan_id: str, metadata: dict = None) -> bool:
         """Import an existing single scan into the workspace.
-        
+
         Args:
             scan_id: SpiderFoot scan ID to import
             metadata: Additional metadata for the imported scan
-            
+
         Returns:
             True if import was successful
         """
@@ -372,31 +373,33 @@ class SpiderFootWorkspace:
             scan_info = self.db.scanInstanceGet(scan_id)
             if not scan_info:
                 raise ValueError(f"Scan {scan_id} not found")
-            
+
             # Check if scan is already in workspace
             existing_scan = next((s for s in self.scans if s['scan_id'] == scan_id), None)
             if existing_scan:
                 self.log.warning(f"Scan {scan_id} already exists in workspace")
-                return False            # Extract target information from scan
+                return False
+
+            # Extract target information from scan
             # scanInstanceGet returns: [name, seed_target, created, started, ended, status]
             if len(scan_info) < 6:
                 raise ValueError(f"Scan info for {scan_id} is incomplete: {scan_info}")
-                
+
             target_value = scan_info[1]  # seed_target is at index 1
             target_type = None
-            
+
             # Ensure target_value is a string and not None
             if target_value is None:
                 raise ValueError(f"Scan {scan_id} has no target value")
             target_value = str(target_value).strip()
-            
+
             if not target_value:
                 raise ValueError(f"Scan {scan_id} has empty target value")
-            
+
             # Try to determine target type
-            from spiderfoot import SpiderFootHelpers
-            target_type = SpiderFootHelpers.targetTypeFromString(target_value)
-            
+            from spiderfoot import SpiderFootHelpers as SFH
+            target_type = SFH.targetTypeFromString(target_value)
+
             # Add target to workspace if not exists
             target_id = None
             existing_target = next((t for t in self.targets if t['value'] == target_value), None)
@@ -404,7 +407,7 @@ class SpiderFootWorkspace:
                 target_id = self.add_target(target_value, target_type, {'imported_with_scan': scan_id})
             else:
                 target_id = existing_target['target_id']
-            
+
             # Import scan
             import_metadata = metadata or {}
             import_metadata.update({
@@ -412,28 +415,28 @@ class SpiderFootWorkspace:
                 'import_source': 'single_scan_import',
                 'original_scan_target': target_value
             })
-            
+
             self.add_scan(scan_id, target_id, import_metadata)
-            
+
             self.log.info(f"Successfully imported scan {scan_id} into workspace {self.workspace_id}")
             return True
-            
+
         except Exception as e:
             self.log.error(f"Failed to import scan {scan_id}: {e}")
             return False
 
     def bulk_import_scans(self, scan_ids: List[str], metadata: dict = None) -> Dict[str, bool]:
         """Import multiple scans into the workspace.
-        
+
         Args:
             scan_ids: List of scan IDs to import
             metadata: Additional metadata for imported scans
-            
+
         Returns:
             Dictionary mapping scan_id to import success status
         """
         results = {}
-        
+
         for scan_id in scan_ids:
             try:
                 success = self.import_single_scan(scan_id, metadata)
@@ -441,7 +444,7 @@ class SpiderFootWorkspace:
             except Exception as e:
                 self.log.error(f"Failed to import scan {scan_id}: {e}")
                 results[scan_id] = False
-        
+
         return results
 
     def start_multiscan(self, target_list: List[str], module_list: List[str],
@@ -459,18 +462,13 @@ class SpiderFootWorkspace:
         Returns:
             dict: Multi-target scan result with scan_ids and status
         """
-        import json
-        import multiprocessing as mp
-        from copy import deepcopy
-        import traceback
-
         self.log.info(f"[MULTISCAN] Starting multi-target scan for workspace: {self.workspace_id}")
         self.log.debug(f"[MULTISCAN] Input parameters - targets: {target_list}, modules: {module_list}, prefix: {scan_name_prefix}")
 
         try:
-            self.log.debug(f"[MULTISCAN] Importing startSpiderFootScanner...")
+            self.log.debug("[MULTISCAN] Importing startSpiderFootScanner...")
             from spiderfoot.scan_service.scanner import startSpiderFootScanner
-            self.log.debug(f"[MULTISCAN] Import successful")
+            self.log.debug("[MULTISCAN] Import successful")
 
             # Parse targets if they're still strings
             if isinstance(target_list, str):
@@ -505,7 +503,7 @@ class SpiderFootWorkspace:
 
                 # Map DOMAIN_NAME to INTERNET_NAME (DOMAIN_NAME is an event type, not a target type)
                 if target_type == 'DOMAIN_NAME':
-                    self.log.debug(f"[MULTISCAN] Mapping DOMAIN_NAME to INTERNET_NAME for target compatibility")
+                    self.log.debug("[MULTISCAN] Mapping DOMAIN_NAME to INTERNET_NAME for target compatibility")
                     target_type = 'INTERNET_NAME'
 
                 # If target type is not provided or empty, detect it
@@ -515,8 +513,7 @@ class SpiderFootWorkspace:
                     if target_type is None:
                         self.log.error(f"[MULTISCAN] Could not determine target type for {target_value}")
                         continue
-                    else:
-                        self.log.debug(f"[MULTISCAN] Detected target type: {target_type}")
+                    self.log.debug(f"[MULTISCAN] Detected target type: {target_type}")
 
                 # Normalize target value like other scan methods
                 original_value = target_value
@@ -553,35 +550,34 @@ class SpiderFootWorkspace:
                 cfg = deepcopy(self.config)
 
                 # Start the scan using the correct signature
-                scanId = SpiderFootHelpers.genScanInstanceId()
-                self.log.info(f"[MULTISCAN] Generated scan ID {scanId} for target {target_value}")
+                scan_id = SpiderFootHelpers.genScanInstanceId()
+                self.log.info(f"[MULTISCAN] Generated scan ID {scan_id} for target {target_value}")
 
                 try:
-                    self.log.debug(f"[MULTISCAN] Starting process for scan {scanId}")
+                    self.log.debug(f"[MULTISCAN] Starting process for scan {scan_id}")
                     # Use multiprocessing like the working examples
                     # startSpiderFootScanner signature: (loggingQueue, *args)
                     # where args are: (scanName, scanId, targetValue, targetType, moduleList, globalOpts)
-                    p = mp.Process(target=startSpiderFootScanner, args=(
-                        logging_queue, scan_name, scanId, target_value, target_type, modlist, cfg))
-                    p.daemon = True
-                    p.start()
-                    self.log.info(f"[MULTISCAN] Successfully started process for scan {scanId}")
+                    process = mp.Process(target=startSpiderFootScanner, args=(
+                        logging_queue, scan_name, scan_id, target_value, target_type, modlist, cfg))
+                    process.daemon = True
+                    process.start()
+                    self.log.info(f"[MULTISCAN] Successfully started process for scan {scan_id}")
 
-                    scan_ids.append(scanId)
+                    scan_ids.append(scan_id)
 
                     # Wait a moment for the scan to initialize in the database
-                    import time
                     time.sleep(0.5)
 
                     # Import the scan into the workspace
-                    self.log.debug(f"[MULTISCAN] Importing scan {scanId} into workspace {self.workspace_id}")
-                    self.import_single_scan(scanId, {
+                    self.log.debug(f"[MULTISCAN] Importing scan {scan_id} into workspace {self.workspace_id}")
+                    self.import_single_scan(scan_id, {
                         'source': 'multi_target_scan',
                         'scan_name_prefix': scan_name_prefix,
                         'target_id': target.get('target_id', 'unknown') if isinstance(target, dict) else 'unknown',
                         'imported_time': time.time()
                     })
-                    self.log.debug(f"[MULTISCAN] Successfully imported scan {scanId} into workspace")
+                    self.log.debug(f"[MULTISCAN] Successfully imported scan {scan_id} into workspace")
 
                 except Exception as e:
                     self.log.error(f"[MULTISCAN] Failed to start scan for target {target_value}: {e}")
@@ -602,10 +598,9 @@ class SpiderFootWorkspace:
                     'scan_ids': scan_ids,
                     'workspace_id': self.workspace_id
                 }
-            else:
-                error_msg = 'Failed to start any scans'
-                self.log.error(f"[MULTISCAN] {error_msg}")
-                return {'success': False, 'error': error_msg}
+            error_msg = 'Failed to start any scans'
+            self.log.error(f"[MULTISCAN] {error_msg}")
+            return {'success': False, 'error': error_msg}
 
         except Exception as e:
             self.log.error(f"[MULTISCAN] Failed to start multi-target scan: {e}")
@@ -810,42 +805,42 @@ class SpiderFootWorkspace:
 
     def remove_target(self, target_id: str) -> bool:
         """Remove target from workspace.
-        
+
         Args:
             target_id: Target ID to remove
-            
+
         Returns:
             True if target was removed
         """
         original_count = len(self.targets)
         self.targets = [t for t in self.targets if t['target_id'] != target_id]
-        
+
         if len(self.targets) < original_count:
             # Also remove associated scans
             self.scans = [s for s in self.scans if s.get('target_id') != target_id]
             self.save_workspace()
             self.log.info(f"Removed target {target_id} from workspace {self.workspace_id}")
             return True
-        
+
         return False
 
     def remove_scan(self, scan_id: str) -> bool:
         """Remove scan from workspace.
-        
+
         Args:
             scan_id: Scan ID to remove
-            
+
         Returns:
             True if scan was removed
         """
         original_count = len(self.scans)
         self.scans = [s for s in self.scans if s['scan_id'] != scan_id]
-        
+
         if len(self.scans) < original_count:
             self.save_workspace()
             self.log.info(f"Removed scan {scan_id} from workspace {self.workspace_id}")
             return True
-        
+
         return False
 
     def delete_workspace(self) -> None:
@@ -857,7 +852,7 @@ class SpiderFootWorkspace:
                 self.db.dbh.execute(query, [self.workspace_id])
                 self.db.conn.commit()
             self.log.info(f"Deleted workspace {self.workspace_id}")
-            
+
         except Exception as e:
             self.log.error(f"Failed to delete workspace: {e}")
             raise
@@ -865,16 +860,17 @@ class SpiderFootWorkspace:
     @classmethod
     def list_workspaces(cls, config: dict) -> List[dict]:
         """List all workspaces.
-        
+
         Args:
             config: SpiderFoot configuration
-            
+
         Returns:
             List of workspace summaries
         """
         db = SpiderFootDb(config)
-        
-        try:            # Ensure table exists
+
+        try:
+            # Ensure table exists
             with db.dbhLock:
                 if hasattr(db, 'db_type') and db.db_type == 'postgresql':
                     db.dbh.execute("""
@@ -931,23 +927,23 @@ class SpiderFootWorkspace:
                         db.dbh.execute("ALTER TABLE tbl_workspaces ADD COLUMN workflows TEXT")
 
                 db.conn.commit()
-            
+
             query = """
-                SELECT workspace_id, name, description, created_time, 
-                       modified_time, targets, scans 
-                FROM tbl_workspaces 
+                SELECT workspace_id, name, description, created_time,
+                       modified_time, targets, scans
+                FROM tbl_workspaces
                 ORDER BY modified_time DESC
             """
-            
+
             with db.dbhLock:
                 db.dbh.execute(query)
                 results = db.dbh.fetchall()
-            
+
             workspaces = []
             for row in results:
                 targets = json.loads(row[5] or "[]")
                 scans = json.loads(row[6] or "[]")
-                
+
                 workspaces.append({
                     'workspace_id': row[0],
                     'name': row[1],
@@ -957,19 +953,19 @@ class SpiderFootWorkspace:
                     'target_count': len(targets),
                     'scan_count': len(scans)
                 })
-            
+
             return workspaces
-            
+
         except Exception as e:
             logging.getLogger("spiderfoot.workspace").error(f"Failed to list workspaces: {e}")
             return []
 
-    def export_data(self, format: str = 'json') -> dict:
+    def export_data(self, format_type: str = 'json') -> dict:
         """Export workspace data.
-        
+
         Args:
-            format: Export format ('json', 'csv')
-            
+            format_type: Export format ('json', 'csv')
+
         Returns:
             Exported data
         """
@@ -986,12 +982,12 @@ class SpiderFootWorkspace:
             'scans': [],
             'scan_results': {}
         }
-        
+
         # Export scan data
         for scan in self.scans:
             scan_id = scan['scan_id']
             scan_info = self.db.scanInstanceGet(scan_id)
-            
+
             if scan_info:
                 scan_data = {
                     'scan_id': scan_id,
@@ -1004,7 +1000,7 @@ class SpiderFootWorkspace:
                     'workspace_metadata': scan.get('metadata', {})
                 }
                 export_data['scans'].append(scan_data)
-                
+
                 # Get scan results
                 results = self.db.scanResultEvent(scan_id, 'ALL')
                 export_data['scan_results'][scan_id] = [
@@ -1018,12 +1014,12 @@ class SpiderFootWorkspace:
                         'risk': result[8]
                     } for result in results
                 ]
-        
+
         return export_data
 
     def get_workspace_summary(self) -> Dict[str, Any]:
         """Get comprehensive workspace summary.
-        
+
         Returns:
             Workspace summary with statistics
         """
@@ -1049,25 +1045,25 @@ class SpiderFootWorkspace:
             'scans_by_status': {},
             'recent_activity': []
         }
-        
+
         # Analyze targets
         for target in self.targets:
             target_type = target['type']
             if target_type not in summary['targets_by_type']:
                 summary['targets_by_type'][target_type] = 0
             summary['targets_by_type'][target_type] += 1
-        
+
         # Analyze scans
         for scan in self.scans:
             scan_id = scan['scan_id']
             scan_info = self.db.scanInstanceGet(scan_id)
-            
+
             if scan_info:
                 status = scan_info[5]
                 if status not in summary['scans_by_status']:
                     summary['scans_by_status'][status] = 0
                 summary['scans_by_status'][status] += 1
-                
+
                 # Count statistics
                 if status == 'FINISHED':
                     summary['statistics']['completed_scans'] += 1
@@ -1075,11 +1071,11 @@ class SpiderFootWorkspace:
                     summary['statistics']['running_scans'] += 1
                 elif status in ['ERROR-FAILED', 'ABORTED']:
                     summary['statistics']['failed_scans'] += 1
-                
+
                 # Count events
                 events = self.db.scanResultEvent(scan_id, 'ALL')
                 summary['statistics']['total_events'] += len(events)
-                
+
                 # Recent activity
                 summary['recent_activity'].append({
                     'type': 'scan',
@@ -1088,36 +1084,36 @@ class SpiderFootWorkspace:
                     'status': status,
                     'time': scan.get('added_time', 0)
                 })
-        
+
         # Sort recent activity by time
         summary['recent_activity'].sort(key=lambda x: x['time'], reverse=True)
         summary['recent_activity'] = summary['recent_activity'][:10]  # Keep last 10
-        
+
         return summary
 
-    def search_events(self, query: str, event_types: List[str] = None, 
+    def search_events(self, query: str, event_types: List[str] = None,
                      scan_ids: List[str] = None) -> List[dict]:
         """Search events across workspace scans.
-        
+
         Args:
             query: Search query string
             event_types: Filter by specific event types
             scan_ids: Filter by specific scan IDs
-            
+
         Returns:
             List of matching events
         """
         matching_events = []
-        
+
         target_scan_ids = scan_ids or self.get_scan_ids()
-        
+
         for scan_id in target_scan_ids:
             events = self.db.scanResultEvent(scan_id, event_types or 'ALL')
-            
+
             for event in events:
                 event_data = event[1]  # event data
                 event_type = event[4]  # event type
-                
+
                 # Simple text search in event data
                 if query.lower() in event_data.lower():
                     matching_events.append({
@@ -1130,77 +1126,70 @@ class SpiderFootWorkspace:
                         'visibility': event[7],
                         'risk': event[8]
                     })
-        
-        return matching_events    # def create_workflow(self):
-    #     """Create a new workflow for this workspace.
-    #     
-    #     Returns:
-    #         SpiderFootWorkflow instance
-    #     """
-    #     from spiderfoot.workflow import SpiderFootWorkflow
-    #     return SpiderFootWorkflow(self.config, self)
 
-    async def generate_cti_report(self, report_type: str = 'threat_assessment', 
+        return matching_events
+
+    async def generate_cti_report(self, report_type: str = 'threat_assessment',
                                  custom_prompt: str = None) -> Dict[str, Any]:
         """Generate CTI report using MCP integration.
-        
+
         Args:
             report_type: Type of report to generate
             custom_prompt: Custom prompt for report generation
-            
+
         Returns:
             Generated CTI report
         """
         from spiderfoot.mcp_integration import SpiderFootMCPClient
-        
+
         mcp_client = SpiderFootMCPClient(self.config)
         return await mcp_client.generate_cti_report(self, report_type, custom_prompt)
 
     def clone_workspace(self, new_name: str = None) -> 'SpiderFootWorkspace':
         """Clone workspace with all targets but no scans.
-        
+
         Args:
             new_name: Name for cloned workspace
-            
+
         Returns:
             New workspace instance
         """
         clone_name = new_name or f"{self.name}_clone_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
-        
+
         # Create new workspace
         cloned_workspace = SpiderFootWorkspace(self.config, name=clone_name)
         cloned_workspace.description = f"Clone of {self.name}"
-        
+
         # Copy targets
         for target in self.targets:
             cloned_workspace.add_target(
-                target['value'], 
-                target['type'], 
+                target['value'],
+                target['type'],
                 target.get('metadata', {})
             )
-        
+
         # Copy metadata (except scans and reports)
         cloned_metadata = self.metadata.copy()
         cloned_metadata.pop('correlations', None)
         cloned_metadata.pop('cti_reports', None)
-        
+
         # Remove any scan-specific metadata
         for key in list(cloned_metadata.keys()):
             if key.startswith('cti_report_'):
                 cloned_metadata.pop(key)
-        
+
         cloned_workspace.metadata = cloned_metadata
         cloned_workspace.save_workspace()
-        
+
         self.log.info(f"Cloned workspace {self.workspace_id} to {cloned_workspace.workspace_id}")
         return cloned_workspace
 
     def merge_workspace(self, other_workspace: 'SpiderFootWorkspace') -> bool:
         """Merge another workspace into this one.
-        
+
         Args:
             other_workspace: Workspace to merge
-            
+
         Returns:
             True if merge was successful
         """
@@ -1210,7 +1199,7 @@ class SpiderFootWorkspace:
                 existing = next((t for t in self.targets if t['value'] == target['value']), None)
                 if not existing:
                     self.add_target(target['value'], target['type'], target.get('metadata', {}))
-            
+
             # Merge scans
             for scan in other_workspace.scans:
                 scan_id = scan['scan_id']
@@ -1218,29 +1207,29 @@ class SpiderFootWorkspace:
                 existing = next((s for s in self.scans if s['scan_id'] == scan_id), None)
                 if not existing:
                     self.add_scan(scan_id, scan.get('target_id'), scan.get('metadata', {}))
-            
+
             # Merge metadata
             for key, value in other_workspace.metadata.items():
                 if key not in self.metadata:
                     self.metadata[key] = value
                 elif isinstance(value, list) and isinstance(self.metadata[key], list):
                     self.metadata[key].extend(value)
-            
+
             self.save_workspace()
             self.log.info(f"Successfully merged workspace {other_workspace.workspace_id} into {self.workspace_id}")
             return True
-            
+
         except Exception as e:
             self.log.error(f"Failed to merge workspace: {e}")
             return False
 
     def update_workspace_metadata(self, workspace_id: str, metadata_updates: dict) -> bool:
         """Update workspace metadata.
-        
+
         Args:
             workspace_id: Workspace ID
             metadata_updates: Dictionary of metadata updates to apply
-            
+
         Returns:
             bool: True if successful, False otherwise
         """
@@ -1248,18 +1237,18 @@ class SpiderFootWorkspace:
             workspace = self.get_workspace(workspace_id)
             if not workspace:
                 return False
-                
+
             # Load the workspace object
             ws = SpiderFootWorkspace(self.config, workspace_id=workspace_id)
-            
+
             # Update metadata
             ws.metadata.update(metadata_updates)
-            
+
             # Save changes
             ws.save_workspace()
-            
+
             return True
-            
+
         except Exception as e:
             self.log.error(f"Failed to update workspace metadata: {e}")
             return False

@@ -490,6 +490,9 @@ class SpiderFootDb:
         return self._config.configGet(*args, **kwargs)
     def configGetAll(self, *args, **kwargs):
         return self._config.configGetAll(*args, **kwargs)
+    def configClear(self, *args, **kwargs):
+        """Clear all configuration values."""
+        return self._config.configClear(*args, **kwargs)
     def scanConfigSet(self, scan_id, optMap):
         return self._config.scanConfigSet(scan_id, optMap)
     def scanConfigGet(self, scan_id):

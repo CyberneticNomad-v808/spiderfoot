@@ -36,10 +36,12 @@ FILES=(
     "/stuff/spiderfoot/spiderfoot/db/__init__.py"
 )
 
-echo "## File Timestamps and Sizes" >> "$OUTPUT_FILE"
-echo "" >> "$OUTPUT_FILE"
-echo "| File | Size (bytes) | Modified Date | Access Date |" >> "$OUTPUT_FILE"
-echo "|------|-------------|---------------|-------------|" >> "$OUTPUT_FILE"
+{
+  echo "## File Timestamps and Sizes"
+  echo ""
+  echo "| File | Size (bytes) | Modified Date | Access Date |"
+  echo "|------|-------------|---------------|-------------|"
+} >> "$OUTPUT_FILE"
 
 for file in "${FILES[@]}"; do
     if [ -f "$file" ]; then
@@ -62,24 +64,27 @@ for file in "${FILES[@]}"; do
     fi
 done
 
-echo "" >> "$OUTPUT_FILE"
-echo "## Summary Statistics" >> "$OUTPUT_FILE"
-echo "" >> "$OUTPUT_FILE"
+{
+  echo ""
+  echo "## Summary Statistics"
+  echo ""
+} >> "$OUTPUT_FILE"
 
 TOTAL_PYTHON_FILES=$(find /stuff/spiderfoot/spiderfoot -name "*.py" -type f 2>/dev/null | wc -l)
 TOTAL_SIZE=$(find /stuff/spiderfoot/spiderfoot -name "*.py" -type f -exec stat -c%s {} + 2>/dev/null | awk '{s+=$1} END {print s}')
 RECENT_MODS=$(find /stuff/spiderfoot/spiderfoot -name "*.py" -type f -mmin -120 2>/dev/null | wc -l)
 
-echo "- **Total Python files in spiderfoot/**: $TOTAL_PYTHON_FILES" >> "$OUTPUT_FILE"
-echo "- **Total size of Python files**: $TOTAL_SIZE bytes" >> "$OUTPUT_FILE"
-echo "- **Files modified in last 2 hours**: $RECENT_MODS" >> "$OUTPUT_FILE"
-
-echo "" >> "$OUTPUT_FILE"
-echo "## Last Modified Check (all Python files)" >> "$OUTPUT_FILE"
-echo "" >> "$OUTPUT_FILE"
-echo "\`\`\`" >> "$OUTPUT_FILE"
-find /stuff/spiderfoot/spiderfoot -name "*.py" -type f -printf "%TY-%Tm-%Td %TH:%TM:%TS %s %p\n" 2>/dev/null | sort -r | head -30 >> "$OUTPUT_FILE"
-echo "\`\`\`" >> "$OUTPUT_FILE"
+{
+  echo "- **Total Python files in spiderfoot/**: $TOTAL_PYTHON_FILES"
+  echo "- **Total size of Python files**: $TOTAL_SIZE bytes"
+  echo "- **Files modified in last 2 hours**: $RECENT_MODS"
+  echo ""
+  echo "## Last Modified Check (all Python files)"
+  echo ""
+  echo "\`\`\`"
+  find /stuff/spiderfoot/spiderfoot -name "*.py" -type f -printf "%TY-%Tm-%Td %TH:%TM:%TS %s %p\n" 2>/dev/null | sort -r | head -30
+  echo "\`\`\`"
+} >> "$OUTPUT_FILE"
 
 echo ""
 echo "Audit complete. Report saved to: $OUTPUT_FILE"

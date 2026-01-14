@@ -78,7 +78,7 @@ def resolveHost6(hostname: str) -> list:
     if hostname.lower().endswith('.onion'):
         return []
 
-    addrs = list()
+    addrs = []
     try:
         for r in socket.getaddrinfo(hostname, None, socket.AF_INET6):
             addrs.append(r[4][0])
@@ -120,7 +120,7 @@ def safeSSLSocket(host: str, port: int, timeout: int) -> 'ssl.SSLSocket':
 def parseCert(rawcert: str, fqdn: str = None, expiringdays: int = 30) -> dict:
     if not rawcert:
         return {}
-    ret = dict()
+    ret = {}
     if '\r' in rawcert:
         rawcert = rawcert.replace('\r', '')
     if isinstance(rawcert, str):
@@ -130,7 +130,7 @@ def parseCert(rawcert: str, fqdn: str = None, expiringdays: int = 30) -> dict:
     sslcert_dump = OpenSSL.crypto.dump_certificate(OpenSSL.crypto.FILETYPE_TEXT, sslcert)
     ret['text'] = sslcert_dump.decode('utf-8', errors='replace')
     ret['issuer'] = str(cert.issuer)
-    ret['altnames'] = list()
+    ret['altnames'] = []
     ret['expired'] = False
     ret['expiring'] = False
     ret['mismatch'] = False
@@ -152,7 +152,7 @@ def parseCert(rawcert: str, fqdn: str = None, expiringdays: int = 30) -> dict:
         ret['altnames'] = ext.value.get_values_for_type(cryptography.x509.DNSName)
     except Exception:
         pass
-    certhosts = list()
+    certhosts = []
     try:
         certhosts.append(cert.subject.get_attributes_for_oid(cryptography.x509.NameOID.COMMON_NAME)[0].value)
         certhosts.extend(ret['altnames'])
@@ -261,7 +261,7 @@ def fetchUrl(url: str, cookies: str = None, timeout: int = 30, useragent: str = 
         result['code'] = str(resp.status_code)
         result['status'] = resp.reason
         result['content'] = resp.content.decode('utf-8', errors='replace')
-        result['headers'] = dict(resp.headers)
+        result['headers'] = {**resp.headers}
         result['realurl'] = resp.url
     except Exception:
         pass

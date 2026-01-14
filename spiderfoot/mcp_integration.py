@@ -603,8 +603,7 @@ class CTIReportExporter:
         html_content = html_template.format(
             title=(
                 f"CTI Report - "
-                f"{report.get('report_type', 'Unknown').replace('_', ' ')"
-                f".title()}"
+                f"{report.get('report_type', 'Unknown').replace('_', ' ').title()}"
             ),
             generated_time=report.get('generated_time', ''),
             risk_rating=report.get('risk_rating', 'UNKNOWN'),

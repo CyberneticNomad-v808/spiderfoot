@@ -86,6 +86,20 @@ class SpiderFootModuleFinder:
     """Custom module finder to fix SpiderFoot module imports."""
 
     def find_spec(self, name, path, target=None):
+        """Find the module spec for a given module name.
+
+        Intercepts SpiderFoot module imports (those starting with 'sfp_') to
+        allow custom module loading and import fixups. Returns None to delegate
+        to the default finder.
+
+        Args:
+            name (str): The name of the module being imported
+            path (list): The search path (used by the import system)
+            target (object): The object to find the module for (optional)
+
+        Returns:
+            None: Always returns None to delegate to default finder
+        """
         # Only intercept sfp_ module imports
         if name.startswith('modules.sfp_') or name.startswith('sfp_'):
             return None  # Let default finder handle it, we'll fix in exec_module
@@ -99,9 +113,30 @@ class SpiderFootModuleLoader:
         self.spec = spec
 
     def create_module(self, spec):
+        """Create a new module object or return None for default creation.
+
+        This method is called during module import. Returning None instructs
+        the import system to use its default module creation behavior.
+
+        Args:
+            spec: The module spec object containing metadata about the module
+                  being imported
+
+        Returns:
+            None: Uses the default module creation
+        """
         return None  # Use default module creation
 
     def exec_module(self, module):
+        """Execute a module and apply SpiderFoot-specific import fixes.
+
+        First executes the module normally using its standard loader, then
+        applies SpiderFoot-specific fixes to properly handle module imports
+        and dependencies.
+
+        Args:
+            module: The module object to be executed
+        """
         # Execute the module normally first
         spec = importlib.util.find_spec(module.__name__)
         if spec and spec.loader:

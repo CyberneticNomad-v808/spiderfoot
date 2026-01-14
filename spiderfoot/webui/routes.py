@@ -1,3 +1,30 @@
+import contextlib
+import csv
+import html
+import json
+import logging
+import multiprocessing as mp
+import os
+import string
+import time
+import traceback
+from copy import deepcopy
+from datetime import datetime
+from io import BytesIO, StringIO
+from urllib.parse import quote_plus
+
+import cherrypy
+import markdown
+import secure
+from mako.lookup import TemplateLookup
+from mako.template import Template
+
+from spiderfoot import SpiderFootDb, SpiderFootHelpers, __version__
+from spiderfoot.helpers import SpiderFootHelpers as SpiderFootHelpersFromHelpers
+from spiderfoot.logger import logListenerSetup, logWorkerSetup
+from spiderfoot.scan_service.scanner import startSpiderFootScanner
+from spiderfoot.sflib import SpiderFoot
+
 from .scan import ScanEndpoints
 from .export import ExportEndpoints
 from .workspace import WorkspaceEndpoints
@@ -5,29 +32,38 @@ from .info import InfoEndpoints
 from .settings import SettingsEndpoints
 from .helpers import WebUiHelpers
 from .performance import PerformanceEnhancedWebUI
-import json
-import logging
-import multiprocessing as mp
-import cherrypy
-import secure
-from copy import deepcopy
-from spiderfoot import SpiderFootDb, SpiderFootHelpers, __version__
+
 try:
-    from spiderfoot.sflib import SpiderFoot
+    import openpyxl
 except ImportError:
-    pass
-from spiderfoot.logger import logListenerSetup, logWorkerSetup
+    openpyxl = None
+
+try:
+    from sf import sfOptdescs
+except ImportError:
+    sfOptdescs = None
 
 
 class WebUiRoutes(SettingsEndpoints, ScanEndpoints, ExportEndpoints, WorkspaceEndpoints, InfoEndpoints, WebUiHelpers, PerformanceEnhancedWebUI):
+    """WebUI routes handler for SpiderFoot web interface."""
+
     defaultConfig = dict()
     config = dict()
     token = None
     docroot = ''
 
     def __init__(self, web_config, config, loggingQueue=None):
-        from mako.lookup import TemplateLookup
+        """Initialize WebUiRoutes with configuration and setup.
 
+        Args:
+            web_config: Web server configuration dictionary
+            config: SpiderFoot configuration dictionary
+            loggingQueue: Optional queue for logging messages
+
+        Raises:
+            TypeError: If config or web_config are not dictionaries
+            ValueError: If config or web_config are empty
+        """
         if not isinstance(config, dict):
             raise TypeError(f"config is {type(config)}; expected dict()")
         if not config:
@@ -44,7 +80,6 @@ class WebUiRoutes(SettingsEndpoints, ScanEndpoints, ExportEndpoints, WorkspaceEn
         # Load modules FIRST before unserializing config from database
         # This ensures module options are properly loaded as reference points
         try:
-            import os
             script_dir = os.path.dirname(os.path.abspath(__file__))
             mod_dir = os.path.join(script_dir, '../../modules')
             if os.path.exists(mod_dir):
@@ -57,8 +92,6 @@ class WebUiRoutes(SettingsEndpoints, ScanEndpoints, ExportEndpoints, WorkspaceEn
 
         # Override database config from environment variables BEFORE SpiderFootDb init
         # This ensures PostgreSQL is used when configured via environment
-        import os
-        from urllib.parse import quote_plus
         db_type = os.getenv('SPIDERFOOT_DB_TYPE', 'sqlite').lower()
         if db_type == 'postgresql':
             db_host = os.getenv('SPIDERFOOT_DB_HOST', 'localhost')
@@ -87,8 +120,18 @@ class WebUiRoutes(SettingsEndpoints, ScanEndpoints, ExportEndpoints, WorkspaceEn
             try:
                 # Load global option descriptions like the legacy version
                 # Import from sf.py where it's defined
-                from sf import sfOptdescs
-                self.config['__globaloptdescs__'] = sfOptdescs
+                if sfOptdescs is not None:
+                    self.config['__globaloptdescs__'] = sfOptdescs
+                else:
+                    # Fallback to basic descriptions
+                    self.config['__globaloptdescs__'] = {
+                        '_debug': "Enable debugging?",
+                        '_maxthreads': "Max number of modules to run concurrently",
+                        '_useragent': "User-Agent string to use for HTTP requests",
+                        '_dnsserver': "Override the default resolver with another DNS server",
+                        '_fetchtimeout': "Number of seconds before giving up on a HTTP request",
+                        '_modulesenabled': "Modules enabled for the scan"
+                    }
             except Exception:
                 # Fallback to basic descriptions
                 self.config['__globaloptdescs__'] = {
@@ -125,7 +168,7 @@ class WebUiRoutes(SettingsEndpoints, ScanEndpoints, ExportEndpoints, WorkspaceEn
             if secure is None:
                 self.log.info("secure module not available, skipping security headers")
                 return
-                
+
             csp = (
                 secure.ContentSecurityPolicy()
                     .default_src("'self'")
@@ -148,13 +191,14 @@ class WebUiRoutes(SettingsEndpoints, ScanEndpoints, ExportEndpoints, WorkspaceEn
                 "tools.response_headers.on": True,
                 "tools.response_headers.headers": secure_headers.framework.cherrypy()
             })
-            
+
             self.log.info("Additional security headers configured successfully")
-            
+
         except Exception as e:
             self.log.error(f"Error configuring security headers: {e}")
 
     def error_page(self):
+        """Handle error pages for 500 errors."""
         cherrypy.response.status = 500
         if self.config.get('_debug'):
             from cherrypy import _cperror
@@ -163,20 +207,36 @@ class WebUiRoutes(SettingsEndpoints, ScanEndpoints, ExportEndpoints, WorkspaceEn
         else:
             cherrypy.response.body = b"<html><body>Error</body></html>"
 
-    def error_page_401(self, status, message, traceback, version):
+    def error_page_401(self, status, message, traceback_text):
+        """Handle 401 Unauthorized errors.
+
+        Args:
+            status: HTTP status code
+            message: Error message
+            traceback_text: Error traceback
+        """
         return ""
 
-    def error_page_404(self, status, message, traceback, version):
-        from mako.template import Template
+    def error_page_404(self, status, message, traceback_text):
+        """Handle 404 Not Found errors.
+
+        Args:
+            status: HTTP status code
+            message: Error message
+            traceback_text: Error traceback
+        """
         templ = Template(
             filename='spiderfoot/templates/error.tmpl', lookup=self.lookup)
         return templ.render(message='Not Found', docroot=self.docroot, status=status, version=__version__)
 
     @cherrypy.expose
     def documentation(self, doc=None, q=None):
-        import os
-        import markdown
-        from datetime import datetime
+        """Serve documentation pages with search functionality.
+
+        Args:
+            doc: Documentation file to display
+            q: Search query to execute
+        """
         doc_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '../../documentation'))
         doc_index = []
         selected_file = doc or 'Home.md'
@@ -192,14 +252,21 @@ class WebUiRoutes(SettingsEndpoints, ScanEndpoints, ExportEndpoints, WorkspaceEn
         related = []
         title = ''
 
-        def highlight(code, lang=None):
-            # Dummy highlight function for template compatibility
+        def highlight_code(code, lang=None):
+            """Dummy highlight function for template compatibility.
+
+            Args:
+                code: Code to highlight
+                lang: Programming language (optional)
+
+            Returns:
+                The code unchanged
+            """
             return code
 
         if not os.path.isdir(doc_dir):
             self.log.error(f"Documentation directory not found: {doc_dir}")
             content = '<div class="alert alert-danger">Documentation directory not found.</div>'
-            from mako.template import Template
             templ = Template(filename='spiderfoot/templates/documentation.tmpl', lookup=self.lookup)
             try:
                 return templ.render(
@@ -218,7 +285,7 @@ class WebUiRoutes(SettingsEndpoints, ScanEndpoints, ExportEndpoints, WorkspaceEn
                     current_version=current_version,
                     related=related,
                     title=title,
-                    highlight=highlight,
+                    highlight=highlight_code,
                     v='',
                     entry={},
                     crumb={}
@@ -227,16 +294,31 @@ class WebUiRoutes(SettingsEndpoints, ScanEndpoints, ExportEndpoints, WorkspaceEn
                 return f'<pre>Template error: {te}</pre>'
         try:
             def list_docs(base_dir):
+                """List all documentation files in directory.
+
+                Args:
+                    base_dir: Base directory to search
+
+                Returns:
+                    List of documentation file paths
+                """
                 docs = []
-                for root, _dirs, files in os.walk(base_dir):
-                    for f in files:
-                        if f.lower().endswith('.md'):
-                            rel = os.path.relpath(os.path.join(root, f), base_dir)
+                for root, dirs, files in os.walk(base_dir):
+                    for filename in files:
+                        if filename.lower().endswith('.md'):
+                            rel = os.path.relpath(os.path.join(root, filename), base_dir)
                             docs.append(rel.replace('\\', '/'))
                 return docs
 
             def get_title(md_path):
-                import contextlib
+                """Extract title from markdown file.
+
+                Args:
+                    md_path: Path to markdown file
+
+                Returns:
+                    Title from file or filename if no title found
+                """
                 with contextlib.suppress(Exception):
                     with open(md_path, encoding='utf-8') as f:
                         for line in f:
@@ -245,10 +327,10 @@ class WebUiRoutes(SettingsEndpoints, ScanEndpoints, ExportEndpoints, WorkspaceEn
                 return os.path.splitext(os.path.basename(md_path))[0]
 
             all_docs = list_docs(doc_dir)
-            for f in all_docs:
-                abs_path = os.path.join(doc_dir, f)
+            for doc_file in all_docs:
+                abs_path = os.path.join(doc_dir, doc_file)
                 doc_index.append({
-                    'file': f,
+                    'file': doc_file,
                     'title': get_title(abs_path),
                     'icon': 'fa fa-file-text-o',
                 })
@@ -287,7 +369,6 @@ class WebUiRoutes(SettingsEndpoints, ScanEndpoints, ExportEndpoints, WorkspaceEn
                     content = f'<div class="alert alert-danger">Error loading documentation: {e}</div>'
             else:
                 content = '<div class="alert alert-warning">Documentation file not found.</div>'
-            from mako.template import Template
             templ = Template(filename='spiderfoot/templates/documentation.tmpl', lookup=self.lookup)
             try:
                 return templ.render(
@@ -306,17 +387,15 @@ class WebUiRoutes(SettingsEndpoints, ScanEndpoints, ExportEndpoints, WorkspaceEn
                     current_version=current_version,
                     related=related,
                     title=title,
-                    highlight=highlight,
+                    highlight=highlight_code,
                     v='',
                     entry={},
                     crumb={}
                 )
             except Exception as te:
-                import traceback
                 return f'<pre>Template error: {te}\n\nTraceback:\n{traceback.format_exc()}</pre>'
         except Exception as e:
             self.log.error(f"Documentation endpoint error: {e}")
-            from mako.template import Template
             templ = Template(filename='spiderfoot/templates/documentation.tmpl', lookup=self.lookup)
             try:
                 return templ.render(
@@ -335,7 +414,7 @@ class WebUiRoutes(SettingsEndpoints, ScanEndpoints, ExportEndpoints, WorkspaceEn
                     current_version=current_version,
                     related=related,
                     title=title,
-                    highlight=highlight,
+                    highlight=highlight_code,
                     v='',
                     entry={},
                     crumb={}
@@ -345,14 +424,14 @@ class WebUiRoutes(SettingsEndpoints, ScanEndpoints, ExportEndpoints, WorkspaceEn
 
     @cherrypy.expose
     def footer(self):
-        from mako.template import Template
+        """Render the footer template."""
         templ = Template(
             filename='spiderfoot/templates/footer.tmpl', lookup=self.lookup)
         return templ.render(docroot=self.docroot, version=__version__)
 
     @cherrypy.expose
     def active_maintenance_status(self):
-        from mako.template import Template
+        """Render the active maintenance status template."""
         templ = Template(
             filename='spiderfoot/templates/active_maintenance_status.tmpl', lookup=self.lookup)
         return templ.render(docroot=self.docroot, version=__version__)
@@ -361,7 +440,7 @@ class WebUiRoutes(SettingsEndpoints, ScanEndpoints, ExportEndpoints, WorkspaceEn
     @cherrypy.tools.json_out()
     def scanlog(self, scanid):
         """Return scan logs for a given scan ID, matching legacy API.
-        
+
         Args:
             scanid: The scan instance ID to retrieve logs for
         """
@@ -375,7 +454,12 @@ class WebUiRoutes(SettingsEndpoints, ScanEndpoints, ExportEndpoints, WorkspaceEn
     @cherrypy.expose
     @cherrypy.tools.json_out()
     def scanerrors(self, id=None, scanid=None):
-        """Return scan errors for a given scan ID, matching legacy API."""
+        """Return scan errors for a given scan ID, matching legacy API.
+
+        Args:
+            id: Scan ID (legacy parameter name)
+            scanid: Scan ID (preferred parameter name)
+        """
         try:
             # Accept both 'id' and 'scanid' parameters for compatibility
             scan_id = id or scanid
@@ -390,7 +474,11 @@ class WebUiRoutes(SettingsEndpoints, ScanEndpoints, ExportEndpoints, WorkspaceEn
     @cherrypy.expose
     @cherrypy.tools.json_out()
     def scancorrelations(self, id):
-        """Return scan correlations for a given scan ID"""
+        """Return scan correlations for a given scan ID.
+
+        Args:
+            id: Scan ID to retrieve correlations for
+        """
         try:
             dbh = self._get_dbh()
             data = dbh.scanCorrelationList(id)
@@ -404,7 +492,7 @@ class WebUiRoutes(SettingsEndpoints, ScanEndpoints, ExportEndpoints, WorkspaceEn
     @cherrypy.expose
     @cherrypy.tools.json_out()
     def vacuum(self):
-        """Vacuum the database"""
+        """Vacuum the database."""
         try:
             dbh = self._get_dbh()
             dbh.vacuumDB()
@@ -415,38 +503,45 @@ class WebUiRoutes(SettingsEndpoints, ScanEndpoints, ExportEndpoints, WorkspaceEn
     @cherrypy.expose
     @cherrypy.tools.json_out()
     def scanstatus(self, id):
-        """Return scan status for a given scan ID"""
+        """Return scan status for a given scan ID.
+
+        Args:
+            id: Scan ID to retrieve status for
+        """
         try:
             dbh = self._get_dbh()
             data = dbh.scanInstanceGet(id)
             if not data:
                 return []
-            
-            import time
+
             created = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(data[2]))
             started = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(data[3]))
             ended = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(data[4]))
-            
+
             riskmatrix = {
                 "HIGH": 0,
                 "MEDIUM": 0,
                 "LOW": 0,
                 "INFO": 0
             }
-            
+
             correlations = dbh.scanCorrelationSummary(id, by="risk")
             if correlations:
                 for c in correlations:
                     riskmatrix[c[0]] = c[1]
-            
+
             return [data[0], data[1], created, started, ended, data[5], riskmatrix]
         except Exception as e:
             return self.jsonify_error("500", str(e))
 
-    @cherrypy.expose  
+    @cherrypy.expose
     @cherrypy.tools.json_out()
     def scandelete(self, id):
-        """Delete a scan"""
+        """Delete a scan.
+
+        Args:
+            id: Scan ID to delete
+        """
         try:
             dbh = self._get_dbh()
             scan = dbh.scanInstanceGet(id)
@@ -458,7 +553,12 @@ class WebUiRoutes(SettingsEndpoints, ScanEndpoints, ExportEndpoints, WorkspaceEn
             return self.jsonify_error("500", str(e))
 
     def jsonify_error(self, status, message):
-        """Helper method to create JSON error responses"""
+        """Helper method to create JSON error responses.
+
+        Args:
+            status: HTTP status code
+            message: Error message text
+        """
         cherrypy.response.headers['Content-Type'] = 'application/json'
         cherrypy.response.status = status
         return {
@@ -469,14 +569,21 @@ class WebUiRoutes(SettingsEndpoints, ScanEndpoints, ExportEndpoints, WorkspaceEn
         }
 
     def error(self, message):
-        """Show generic error page with error message"""
-        from mako.template import Template
+        """Show generic error page with error message.
+
+        Args:
+            message: Error message to display
+        """
         templ = Template(
             filename='spiderfoot/templates/error.tmpl', lookup=self.lookup)
         return templ.render(message=message, docroot=self.docroot, version=__version__)
 
     def reset_settings(self):
-        """Reset settings to default"""
+        """Reset settings to default.
+
+        Returns:
+            True if successful, False otherwise
+        """
         try:
             dbh = self._get_dbh()
             dbh.configClear()
@@ -486,41 +593,53 @@ class WebUiRoutes(SettingsEndpoints, ScanEndpoints, ExportEndpoints, WorkspaceEn
 
     @cherrypy.expose
     def resultsetfp(self, id, resultids, fp):
-        """Set false positive flag for scan results"""
+        """Set false positive flag for scan results.
+
+        Args:
+            id: Scan ID
+            resultids: Result IDs to flag
+            fp: False positive flag value
+        """
         try:
             dbh = self._get_dbh()
             scan = dbh.scanInstanceGet(id)
             if not scan:
                 return b'["ERROR", "Scan not found"]'
-            
+
             # Parse result IDs
-            import json
             try:
                 ids = json.loads(resultids)
-            except:
+            except Exception:
                 ids = [resultids]
-            
+
             # Update FP status
             for result_id in ids:
                 dbh.scanResultsUpdateFP(result_id, fp == '1')
-            
+
             return b'["SUCCESS", ""]'
         except Exception as e:
             return b'["ERROR", "%s"]' % str(e).encode('utf-8')
 
     @cherrypy.expose
     def startscan(self, scanname, scantarget, modulelist, typelist, usecase):
-        """Start a new scan"""
+        """Start a new scan.
+
+        Args:
+            scanname: Name for the scan
+            scantarget: Target to scan
+            modulelist: Comma-separated list of modules
+            typelist: Comma-separated list of types
+            usecase: Use case selection
+        """
         try:
-            from sfwebui import SpiderFootHelpers
-            import logging
+            from sfwebui import SpiderFootHelpers as SFHelpers
             logger = logging.getLogger('startscan')
 
             # Generate scan ID
-            scanId = SpiderFootHelpers.genScanInstanceId()
+            scanId = SFHelpers.genScanInstanceId()
 
             # Determine target type
-            targetType = SpiderFootHelpers.targetTypeFromString(scantarget)
+            targetType = SFHelpers.targetTypeFromString(scantarget)
             if not targetType:
                 return self.error("Invalid target type")
 
@@ -540,8 +659,8 @@ class WebUiRoutes(SettingsEndpoints, ScanEndpoints, ExportEndpoints, WorkspaceEn
             if 'all' in modlist:
                 modlist = [m for m in modlist if m != 'all']
                 try:
-                    modules = SpiderFootHelpers.loadModulesAsDict(
-                        SpiderFootHelpers.dataPath() + '/../modules',
+                    modules = SFHelpers.loadModulesAsDict(
+                        SFHelpers.dataPath() + '/../modules',
                         ['sfp_template.py']
                     )
                     all_modules = [m for m in modules.keys() if m.startswith('sfp_')]
@@ -558,28 +677,25 @@ class WebUiRoutes(SettingsEndpoints, ScanEndpoints, ExportEndpoints, WorkspaceEn
             logger.info(f"Starting scan {scanId} with {len(modlist)} modules: {modlist[:5]}...")
 
             # Start the scan process
-            from sfwebui import mp
-            from spiderfoot.scan_service.scanner import startSpiderFootScanner
-
-            process = mp.Process(
+            from sfwebui import mp as mp_sfwebui
+            process = mp_sfwebui.Process(
                 target=startSpiderFootScanner,
                 args=(self.loggingQueue, scanname, scanId, scantarget, targetType,
                       modlist, self.config)
             )
             process.daemon = True
             process.start()
-            
+
             # Wait for scan to initialize (with timeout)
             dbh = self._get_dbh()
-            from sfwebui import time
             timeout_iterations = 10  # 10 iterations for tests (not seconds)
             iterations = 0
             while dbh.scanInstanceGet(scanId) is None and iterations < timeout_iterations:
                 time.sleep(1)
                 iterations += 1
-                
+
             raise cherrypy.HTTPRedirect(f"{self.docroot}/scaninfo?id={scanId}")
-            
+
         except cherrypy.HTTPRedirect:
             raise
         except Exception as e:
@@ -587,74 +703,73 @@ class WebUiRoutes(SettingsEndpoints, ScanEndpoints, ExportEndpoints, WorkspaceEn
 
     @cherrypy.expose
     def rerunscan(self, id):
-        """Re-run an existing scan"""
+        """Re-run an existing scan.
+
+        Args:
+            id: Scan ID to re-run
+        """
         try:
-            from copy import deepcopy
-            from sfwebui import SpiderFootDb
+            from sfwebui import SpiderFootDb as SFDb
             cfg = deepcopy(self.config)
-            dbh = SpiderFootDb(cfg)
+            dbh = SFDb(cfg)
             info = dbh.scanInstanceGet(id)
             if not info:
                 return self.error("Invalid scan ID.")
-                
+
             scanname = info[0]
             scantarget = info[1]
-            
+
             if not scantarget:
                 return self.error(f"Scan {id} has no target defined.")
-                
+
             # Get scan configuration
             scanconfig = dbh.scanConfigGet(id)
             if not scanconfig:
                 return self.error(f"Error loading config from scan: {id}")
-                
+
             # Parse module list - handle both JSON array and comma-separated formats
             modules_enabled = scanconfig['_modulesenabled']
             if modules_enabled.startswith('['):
                 # JSON array format
-                import json
                 modlist = json.loads(modules_enabled)
             else:
                 # Comma-separated format (legacy)
                 modlist = modules_enabled.split(',')
             if "sfp__stor_stdout" in modlist:
                 modlist.remove("sfp__stor_stdout")
-                
-            from sfwebui import SpiderFootHelpers
-            targetType = SpiderFootHelpers.targetTypeFromString(scantarget)
+
+            from sfwebui import SpiderFootHelpers as SFHelpersLocal
+            targetType = SFHelpersLocal.targetTypeFromString(scantarget)
             if not targetType:
                 # Try with quotes
-                targetType = SpiderFootHelpers.targetTypeFromString(f'"{scantarget}"')
-                
+                targetType = SFHelpersLocal.targetTypeFromString(f'"{scantarget}"')
+
             if not targetType:
                 return self.error(f"Cannot determine target type for scan rerun. Target '{scantarget}' is not recognized.")
-                
+
             if targetType not in ["HUMAN_NAME", "BITCOIN_ADDRESS"]:
                 scantarget = scantarget.lower()
-                
+
             # Start new scan
-            scanId = SpiderFootHelpers.genScanInstanceId()
-            
-            from sfwebui import mp
-            from spiderfoot.scan_service.scanner import startSpiderFootScanner
-            
-            process = mp.Process(
+            scanId = SFHelpersLocal.genScanInstanceId()
+
+            from sfwebui import mp as mp_sfwebui
+            process = mp_sfwebui.Process(
                 target=startSpiderFootScanner,
                 args=(self.loggingQueue, scanname, scanId, scantarget, targetType, modlist, cfg)
             )
             process.daemon = True
             process.start()
-            
+
             # Wait for scan to initialize (with timeout)
-            from sfwebui import time
             timeout_iterations = 10  # 10 iterations for tests (not seconds)
             iterations = 0
             while dbh.scanInstanceGet(scanId) is None and iterations < timeout_iterations:
                 time.sleep(1)
                 iterations += 1
-                
+
             raise cherrypy.HTTPRedirect(f"{self.docroot}/scaninfo?id={scanId}")
-            
+
         except cherrypy.HTTPRedirect:
             raise
         except Exception as e:
@@ -663,44 +778,61 @@ class WebUiRoutes(SettingsEndpoints, ScanEndpoints, ExportEndpoints, WorkspaceEn
     @cherrypy.expose
     @cherrypy.tools.json_out()
     def stopscan(self, id):
-        """Stop a running scan"""
+        """Stop a running scan.
+
+        Args:
+            id: Scan ID(s) to stop (comma-separated for multiple)
+        """
         try:
             if not id:
                 return ''
-                
+
             dbh = self._get_dbh()
             ids = id.split(',')
             errors = []
-            
+
             for scan_id in ids:
                 try:
                     scan = dbh.scanInstanceGet(scan_id)
                     if not scan:
                         errors.append({'id': scan_id, 'error': 'Scan not found'})
                         continue
-                    
+
                     # Set scan status to stopped
                     dbh.scanInstanceSet(scan_id, None, None, 'STOPPED')
-                    
+
                 except Exception as e:
                     errors.append({'id': scan_id, 'error': str(e)})
-            
+
             if errors:
                 return f'["ERROR", "{errors}"]'
             else:
                 return ''
-                
+
         except Exception as e:
             return f'["ERROR", "{str(e)}"]'
 
     def _get_dbh(self):
-        """Helper to get a new DB handle (matches legacy pattern)"""
-        from sfwebui import SpiderFootDb
-        return SpiderFootDb(self.config, init=False)
+        """Helper to get a new DB handle (matches legacy pattern).
 
-    # Add methods from helpers for backward compatibility
+        Returns:
+            SpiderFootDb instance
+        """
+        from sfwebui import SpiderFootDb as SFDbLocal
+        return SFDbLocal(self.config, init=False)
+
     def cleanUserInput(self, inputList):
-        """Clean user input by escaping HTML"""
+        """Clean user input by escaping HTML.
+
+        Args:
+            inputList: List of strings to clean
+
+        Returns:
+            List of cleaned strings
+
+        Raises:
+            TypeError: If inputList is not a list
+        """
         if not isinstance(inputList, list):
             raise TypeError(f"inputList is {type(inputList)}; expected list()")
         ret = list()
@@ -708,32 +840,40 @@ class WebUiRoutes(SettingsEndpoints, ScanEndpoints, ExportEndpoints, WorkspaceEn
             if not item:
                 ret.append("")
                 continue
-            import html
             c = html.escape(item, True)
             c = c.replace("&amp;", "&").replace("&quot;", "\"")
             ret.append(c)
         return ret
 
     def searchBase(self, scan_id=None, eventType=None, value=None):
-        """Search scan results"""
+        """Search scan results.
+
+        Args:
+            scan_id: Scan ID to search in
+            eventType: Event type to filter by
+            value: Search value or regex pattern
+
+        Returns:
+            List of matching results
+        """
         retdata = []
-        
+
         if not scan_id and not eventType and not value:
             return retdata
-            
+
         if not value:
             value = ''
-            
+
         regex = ""
         if value.startswith("/") and value.endswith("/"):
-            regex = value[1:len(value) - 1] 
+            regex = value[1:len(value) - 1]
             value = ""
-            
+
         value = value.replace('*', '%')
         if value in [None, ""] and regex in [None, ""]:
             value = "%"
             regex = ""
-            
+
         dbh = self._get_dbh()
         criteria = {
             'scan_id': scan_id or '',
@@ -741,15 +881,13 @@ class WebUiRoutes(SettingsEndpoints, ScanEndpoints, ExportEndpoints, WorkspaceEn
             'value': value or '',
             'regex': regex or '',
         }
-        
+
         try:
             data = dbh.search(criteria)
         except Exception:
             return retdata
-            
+
         for row in data:
-            import time
-            import html
             lastseen = time.strftime(
                 "%Y-%m-%d %H:%M:%S", time.localtime(row[0]))
             escapeddata = html.escape(row[1])
@@ -757,21 +895,28 @@ class WebUiRoutes(SettingsEndpoints, ScanEndpoints, ExportEndpoints, WorkspaceEn
             retdata.append([lastseen, escapeddata, escapedsrc,
                             row[3], row[5], row[6], row[7], row[8], row[10],
                             row[11], row[4], row[13], row[14]])
-        
+
         return retdata
 
     def buildExcel(self, data, columnNames, sheetNameIndex=0):
-        """Convert supplied raw data into Excel format"""
-        from spiderfoot import SpiderFootDb
-        from sfwebui import openpyxl, BytesIO
-        import string
-        
+        """Convert supplied raw data into Excel format.
+
+        Args:
+            data: Raw data rows to convert
+            columnNames: Column names for headers
+            sheetNameIndex: Index of column to use for sheet names
+
+        Returns:
+            Excel file bytes
+        """
         rowNums = dict()
+        if openpyxl is None:
+            raise ImportError("openpyxl is required for Excel export")
         workbook = openpyxl.Workbook()
         defaultSheet = workbook.active
         columnNames.pop(sheetNameIndex)
         allowed_sheet_chars = string.ascii_uppercase + string.digits + '_'
-        
+
         for row in data:
             sheetName = "".join(
                 [c for c in str(row.pop(sheetNameIndex)) if c.upper() in allowed_sheet_chars])
@@ -803,47 +948,53 @@ class WebUiRoutes(SettingsEndpoints, ScanEndpoints, ExportEndpoints, WorkspaceEn
             f.seek(0)
             return f.read()
 
-    # Export methods
     @cherrypy.expose
     def scanexportlogs(self, scan_id, dialect="excel"):
-        """Export scan logs"""
+        """Export scan logs.
+
+        Args:
+            scan_id: Scan ID to export logs for
+            dialect: CSV dialect to use
+        """
         try:
             dbh = self._get_dbh()
             data = dbh.scanLogs(scan_id)
             if not data:
                 return self.error("No scan logs found")
-                
-            import csv
-            from sfwebui import StringIO
+
             fileobj = StringIO()
             parser = csv.writer(fileobj, dialect=dialect)
             parser.writerow(["Date", "Component", "Type", "Event", "Event ID"])
             for row in data:
                 parser.writerow([str(x) for x in row])
-                
+
             cherrypy.response.headers['Content-Disposition'] = f"attachment; filename=SpiderFoot-{scan_id}.log.csv"
             cherrypy.response.headers['Content-Type'] = "application/csv"
             cherrypy.response.headers['Pragma'] = "no-cache"
             return fileobj.getvalue().encode('utf-8')
-            
+
         except Exception as e:
             return self.error(f"Export failed: {str(e)}")
 
     @cherrypy.expose
     def scancorrelationsexport(self, scan_id, filetype="csv", dialect="excel"):
-        """Export scan correlations"""
+        """Export scan correlations.
+
+        Args:
+            scan_id: Scan ID to export correlations for
+            filetype: File format (csv or other)
+            dialect: CSV dialect to use
+        """
         try:
             dbh = self._get_dbh()
-            data = dbh.scanCorrelations(scan_id)
+            data = dbh.scanCorrelationList(scan_id)
             scan = dbh.scanInstanceGet(scan_id)
             if not scan:
                 return self.error("Scan not found")
-                
+
             headings = ["Rule Name", "Correlation", "Risk", "Description"]
-            
+
             if filetype.lower() == 'csv':
-                import csv
-                from sfwebui import StringIO
                 cherrypy.response.headers['Content-Disposition'] = f"attachment; filename=SpiderFoot-{scan_id}-correlations.csv"
                 cherrypy.response.headers['Content-Type'] = "application/csv"
                 cherrypy.response.headers['Pragma'] = "no-cache"
@@ -855,127 +1006,141 @@ class WebUiRoutes(SettingsEndpoints, ScanEndpoints, ExportEndpoints, WorkspaceEn
                 return fileobj.getvalue()
             else:
                 return self.error("Unsupported file type")
-                
+
         except Exception as e:
             return self.error(f"Export failed: {str(e)}")
 
     @cherrypy.expose
     def scaneventresultexport(self, scan_id, event_type, filetype="csv", dialect="excel"):
-        """Export scan event results"""
+        """Export scan event results.
+
+        Args:
+            scan_id: Scan ID to export results for
+            event_type: Event type to export
+            filetype: File format (csv or other)
+            dialect: CSV dialect to use
+        """
         try:
             dbh = self._get_dbh()
             data = dbh.scanResultEvent(scan_id, event_type)
-            
+
             headings = ["Date", "Type", "Value", "Source", "Module", "Risk", "FP", "Correlation", "EventId"]
-            
+
             if filetype.lower() == 'csv':
-                import csv
-                from sfwebui import StringIO
                 cherrypy.response.headers['Content-Disposition'] = f"attachment; filename=SpiderFoot-{scan_id}-{event_type}.csv"
                 cherrypy.response.headers['Content-Type'] = "application/csv"
                 cherrypy.response.headers['Pragma'] = "no-cache"
                 fileobj = StringIO()
                 parser = csv.writer(fileobj, dialect=dialect)
                 parser.writerow(headings)
-                
+
                 for row in data:
-                    import time
                     formatted_row = [
                         time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(row[0])),
-                        row[3], row[1], row[2], row[4],  
+                        row[3], row[1], row[2], row[4],
                         '', '', '', row[12] if len(row) > 12 else ''
                     ]
                     parser.writerow(formatted_row)
-                    
+
                 return fileobj.getvalue().encode('utf-8')
             else:
                 return self.error("Unsupported file type")
-                
+
         except Exception as e:
             return self.error(f"Export failed: {str(e)}")
 
     @cherrypy.expose
     def scaneventresultexportmulti(self, ids, filetype="csv", dialect="excel"):
-        """Export multiple scan event results"""
+        """Export multiple scan event results.
+
+        Args:
+            ids: Comma-separated scan IDs
+            filetype: File format (csv or other)
+            dialect: CSV dialect to use
+        """
         try:
             scan_ids = ids.split(',')
             dbh = self._get_dbh()
-            
+
             # Validate scans exist
             for scan_id in scan_ids:
                 scan = dbh.scanInstanceGet(scan_id)
                 if not scan:
                     return self.error(f"Scan not found: {scan_id}")
-            
+
             # Get all data
             all_data = []
             for scan_id in scan_ids:
                 data = dbh.scanResultEvent(scan_id)
                 for row in data:
-                    import time
                     formatted_row = [
                         time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(row[0])),
                         row[3], row[1], row[2], row[4],
                         '', '', '', scan_id
                     ]
                     all_data.append(formatted_row)
-            
+
             if filetype.lower() == 'csv':
-                import csv
-                from sfwebui import StringIO
                 cherrypy.response.headers['Content-Disposition'] = f"attachment; filename=SpiderFoot-multi-export.csv"
                 cherrypy.response.headers['Content-Type'] = "application/csv"
                 cherrypy.response.headers['Pragma'] = "no-cache"
                 fileobj = StringIO()
                 parser = csv.writer(fileobj, dialect=dialect)
                 parser.writerow(["Date", "Type", "Value", "Source", "Module", "Risk", "FP", "Correlation", "ScanId"])
-                
+
                 for row in all_data:
                     parser.writerow(row)
-                    
+
                 return fileobj.getvalue().encode('utf-8')
             else:
                 return self.error("Unsupported file type")
-                
+
         except Exception as e:
             return self.error(f"Export failed: {str(e)}")
 
     @cherrypy.expose
     def scansearchresultexport(self, scan_id, eventType=None, value=None, filetype="csv", dialect="excel"):
-        """Export search results"""
+        """Export search results.
+
+        Args:
+            scan_id: Scan ID to export results from
+            eventType: Event type to filter by
+            value: Search value to filter by
+            filetype: File format (csv or other)
+            dialect: CSV dialect to use
+        """
         try:
             search_results = self.searchBase(scan_id, eventType, value)
-            
+
             headings = ["Date", "Type", "Value", "Source", "Module", "Risk", "FP", "Correlation", "EventId"]
-            
+
             if filetype.lower() == 'csv':
-                import csv
-                from sfwebui import StringIO
                 cherrypy.response.headers['Content-Disposition'] = f"attachment; filename=SpiderFoot-{scan_id}-search.csv"
                 cherrypy.response.headers['Content-Type'] = "application/csv"
                 cherrypy.response.headers['Pragma'] = "no-cache"
                 fileobj = StringIO()
                 parser = csv.writer(fileobj, dialect=dialect)
                 parser.writerow(headings)
-                
+
                 for row in search_results:
                     parser.writerow(row)
-                    
+
                 return fileobj.getvalue().encode('utf-8')
             else:
                 return self.error("Unsupported file type")
-                
+
         except Exception as e:
             return self.error(f"Export failed: {str(e)}")
 
     @cherrypy.expose
     def scanexportjsonmulti(self, ids):
-        """Export multiple scans as JSON"""
-        from spiderfoot import SpiderFootDb
-        import json
-        import time
-        
-        dbh = SpiderFootDb(self.config)
+        """Export multiple scans as JSON.
+
+        Args:
+            ids: Comma-separated scan IDs to export
+        """
+        from spiderfoot import SpiderFootDb as SFDbExport
+        dbh = SFDbExport(self.config)
         scaninfo = list()
         scan_name = ""
 
@@ -1024,7 +1189,13 @@ class WebUiRoutes(SettingsEndpoints, ScanEndpoints, ExportEndpoints, WorkspaceEn
 
     @cherrypy.expose
     def scanviz(self, id=None, scan_id=None, gexf="0"):
-        """Generate scan visualization"""
+        """Generate scan visualization.
+
+        Args:
+            id: Scan ID (legacy parameter name)
+            scan_id: Scan ID (preferred parameter name)
+            gexf: Whether to use GEXF format
+        """
         try:
             # Accept both 'id' and 'scan_id' parameters for compatibility
             sid = id or scan_id
@@ -1033,12 +1204,11 @@ class WebUiRoutes(SettingsEndpoints, ScanEndpoints, ExportEndpoints, WorkspaceEn
             dbh = self._get_dbh()
             data = dbh.scanResultEvent(sid)
             scan = dbh.scanInstanceGet(sid)
-            
+
             if not scan:
                 return json.dumps({"nodes": [], "edges": [], "error": "Scan not found"})
 
-            from spiderfoot.helpers import SpiderFootHelpers
-            graph_data = SpiderFootHelpers.buildGraphJson([scan[1]], data)
+            graph_data = SpiderFootHelpersFromHelpers.buildGraphJson([scan[1]], data)
             return graph_data
 
         except Exception as e:
@@ -1046,14 +1216,19 @@ class WebUiRoutes(SettingsEndpoints, ScanEndpoints, ExportEndpoints, WorkspaceEn
 
     @cherrypy.expose
     def scanvizmulti(self, ids, gexf="1"):
-        """Generate multi-scan visualization"""
+        """Generate multi-scan visualization.
+
+        Args:
+            ids: Comma-separated scan IDs
+            gexf: Whether to use GEXF format
+        """
         try:
             scan_ids = ids.split(',')
             dbh = self._get_dbh()
-            
+
             all_data = []
             root_target = None
-            
+
             for scan_id in scan_ids:
                 scan = dbh.scanInstanceGet(scan_id)
                 if scan:
@@ -1061,22 +1236,25 @@ class WebUiRoutes(SettingsEndpoints, ScanEndpoints, ExportEndpoints, WorkspaceEn
                         root_target = scan[1]
                     data = dbh.scanResultEvent(scan_id)
                     all_data.extend(data)
-            
+
             if not all_data:
                 return self.error("No scan data found")
-            
-            from spiderfoot.helpers import SpiderFootHelpers
-            graph_data = SpiderFootHelpers.buildGraphGexf(all_data, root_target or "multi-scan")
+
+            graph_data = SpiderFootHelpersFromHelpers.buildGraphGexf(all_data, root_target or "multi-scan")
             return graph_data
-            
+
         except Exception as e:
             return self.error(f"Visualization failed: {str(e)}")
 
-    # Workspace methods  
     @cherrypy.expose
     @cherrypy.tools.json_out()
-    def workspacescanresults(self, workspace_id, scan_id=None, event_type=None, limit=100):
-        """Get workspace scan results"""
+    def workspacescanresults(self, workspace_id, limit=100):
+        """Get workspace scan results.
+
+        Args:
+            workspace_id: Workspace ID to retrieve results for
+            limit: Maximum results to return (default 100)
+        """
         try:
             # Convert string limit to int if needed
             if isinstance(limit, str):
@@ -1086,18 +1264,18 @@ class WebUiRoutes(SettingsEndpoints, ScanEndpoints, ExportEndpoints, WorkspaceEn
                         limit = 100
                 except ValueError:
                     limit = 100
-                    
-            from sfwebui import SpiderFootWorkspace
-            workspace = SpiderFootWorkspace(self.config)
-            workspace_instance = workspace.getWorkspace(workspace_id)
-            
+
+            from sfwebui import SpiderFootWorkspace as SFWorkspace
+            workspace = SFWorkspace(self.config)
+            workspace_instance = workspace.get_workspace_summary() if hasattr(workspace, "get_workspace_summary") else workspace  # noqa: E1101
+
             if not workspace_instance:
                 return {'success': False, 'error': 'Workspace not found'}
-            
-            from sfwebui import SpiderFootDb
-            dbh = SpiderFootDb(self.config)
+
+            from sfwebui import SpiderFootDb as SFDbWorkspace
+            dbh = SFDbWorkspace(self.config)
             results = []
-            
+
             # Get scans from workspace
             scans = getattr(workspace_instance, 'scans', [])
             if scans:
@@ -1105,13 +1283,13 @@ class WebUiRoutes(SettingsEndpoints, ScanEndpoints, ExportEndpoints, WorkspaceEn
                     scan_data = dbh.scanResultSummary(scan.get('scan_id'))
                     if scan_data:
                         results.append(scan_data)
-            
+
             return {
-                'success': True, 
+                'success': True,
                 'workspace_id': workspace_id,
                 'results': results
             }
-            
+
         except Exception as e:
             return {'success': False, 'error': str(e)}
 
@@ -1134,7 +1312,7 @@ class WebUiRoutes(SettingsEndpoints, ScanEndpoints, ExportEndpoints, WorkspaceEn
                     self.config['__modules__'] = {}
         else:
             self.config['__modules__'] = {}
-        
+
         # Validate database configuration
         # Note: Database config should come from sf.py which reads environment variables
         # If it's not set, that's a critical error - don't silently default to SQLite
@@ -1156,13 +1334,13 @@ class WebUiRoutes(SettingsEndpoints, ScanEndpoints, ExportEndpoints, WorkspaceEn
                 "\n"
                 "See docs/POSTGRESQL_SETUP.md for setup instructions."
             )
-        
+
         # Validate other critical configuration keys
         if '__version__' not in self.config:
             self.config['__version__'] = __version__
-        
+
         if '_logging' not in self.config:
             self.config['_logging'] = 'INFO'
-        
+
         if '_modulesenabled' not in self.config:
             self.config['_modulesenabled'] = []

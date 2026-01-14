@@ -40,7 +40,7 @@ class DatabaseSecurity:
                 'user_id': user_id or 'system',
                 'data_hash': data_hash,
                 'success': success,
-                'ip_address': getattr(request, 'remote_addr', None) if 'request' in globals() else None
+                'ip_address': None
             }
 
             # Log to audit table (create if doesn't exist)
@@ -68,7 +68,7 @@ class DatabaseSecurity:
                 self.db.conn.commit()
 
         except Exception as e:
-            self.logger.error(f"Failed to write audit log: {e}")
+            self.logger.error("Failed to write audit log: %s", e)
 
     def _ensure_audit_table(self) -> None:
         """Ensure audit log table exists."""
@@ -102,7 +102,7 @@ class DatabaseSecurity:
                 self.db.dbh.execute(qry)
                 self.db.conn.commit()
         except Exception as e:
-            self.logger.error(f"Failed to create audit table: {e}")
+            self.logger.error("Failed to create audit table: %s", e)
 
     def hash_sensitive_data(self, data: str, salt: str = None) -> str:
         """Create hash of sensitive data for audit logging.
@@ -145,7 +145,7 @@ class DatabaseSecurity:
         query_lower = query.lower()
         for pattern in dangerous_patterns:
             if re.search(pattern, query_lower, re.IGNORECASE):
-                self.logger.warning(f"Potentially dangerous SQL pattern detected: {pattern}")
+                self.logger.warning("Potentially dangerous SQL pattern detected: %s", pattern)
                 return False
 
         return True
@@ -199,10 +199,10 @@ class DatabaseSecurity:
                 self.db.dbh.execute(qry, params)
                 self.db.conn.commit()
 
-                self.logger.info(f"Cleaned audit logs older than {retention_days} days")
+                self.logger.info("Cleaned audit logs older than %s days", retention_days)
 
         except Exception as e:
-            self.logger.error(f"Failed to clean audit logs: {e}")
+            self.logger.error("Failed to clean audit logs: %s", e)
 
 # Add security instance to SpiderFootDb
 # ...existing SpiderFootDb class code...
