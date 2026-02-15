@@ -10,14 +10,14 @@ from _pytest.runner import runtestprotocol
 
 # Set required environment variables BEFORE any SpiderFoot imports
 # These are required by sfp__stor_db which reads os.environ at class definition time
-os.environ.setdefault('SPIDERFOOT_DB_TYPE', 'postgresql')
-os.environ.setdefault('SPIDERFOOT_DB_HOST', 'unified-postgres.blk.ing')
-os.environ.setdefault('SPIDERFOOT_DB_PORT', '5432')
-os.environ.setdefault('SPIDERFOOT_DB_NAME', 'spiderfoot_test')
-os.environ.setdefault('SPIDERFOOT_DB_USER', 'spiderfoot')
-
+SPIDERFOOT_DB_TYPE = 'postgresql'
+SPIDERFOOT_DB_HOST = 'op://DEV_VAULT/local_infra/SPIDERFOOT_DB_HOST'
+SPIDERFOOT_DB_PORT = 'op://DEV_VAULT/local_infra/SPIDERFOOT_DB_PORT'
+SPIDERFOOT_DB_NAME = 'op://DEV_VAULT/local_infra/SPIDERFOOT_DB_NAME'
+SPIDERFOOT_DB_USER = 'op://DEV_VAULT/local_infra/SPIDERFOOT_DB_USER'
+SPIDERFOOT_DB_PASSWORD = 'op://DEV_VAULT/local_infra/SPIDERFOOT_DB_PASSWORD'
 # Password MUST be set via environment variable - no default for security
-if 'SPIDERFOOT_DB_PASSWORD' not in os.environ:
+if not 'SPIDERFOOT_DB_PASSWORD':
     raise EnvironmentError(
         "SPIDERFOOT_DB_PASSWORD environment variable is required for tests.\n"
         "Set it with: export SPIDERFOOT_DB_PASSWORD='your_password'"
@@ -32,20 +32,20 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 # Import SpiderFootHelpers after path setup
-from spiderfoot import SpiderFootHelpers
+from spiderfoot import SpiderFootHelpers  # noqa: E402
 
 # Import our test fixtures and utilities
-from test.fixtures.database_fixtures import *
-from test.fixtures.network_fixtures import *
-from test.fixtures.event_fixtures import *
-from test.utils import legacy_test_helpers
+from test.fixtures.database_fixtures import *  # noqa: E402, F403, F401
+from test.fixtures.network_fixtures import *  # noqa: E402, F403, F401
+from test.fixtures.event_fixtures import *  # noqa: E402, F403, F401
+from test.utils import legacy_test_helpers  # noqa: E402, F401
 
 # Set up logging with error suppression for distributed testing
 
 
 class SafeHandler(logging.StreamHandler):
     """A logging handler that suppresses BrokenPipeError and similar issues during xdist termination."""
-    
+
     def emit(self, record):
         with contextlib.suppress(OSError, ValueError):
             super().emit(record)
@@ -53,7 +53,7 @@ class SafeHandler(logging.StreamHandler):
 
 class SafeFileHandler(logging.FileHandler):
     """A file handler that suppresses errors during xdist termination."""
-    
+
     def emit(self, record):
         with contextlib.suppress(OSError, ValueError):
             super().emit(record)
@@ -75,31 +75,31 @@ logging.basicConfig(
 @pytest.hookimpl(trylast=True)
 def pytest_runtest_protocol(item, nextitem):
     start_time = time.time()
-    
+
     # Use safe logging
     with contextlib.suppress(OSError, ValueError):
         logging.info(f"Starting test: {item.nodeid}")
-        
+
         # Show active threads at start
         active_threads = threading.enumerate()
         logging.info(f"Active threads before test ({len(active_threads)}): {[t.name for t in active_threads]}")
-    
+
     # Run the test normally
     runtestprotocol(item, nextitem=nextitem)
-    
+
     # Use safe logging for completion
     with contextlib.suppress(OSError, ValueError):
         # Show threads after test completion
         active_threads = threading.enumerate()
         logging.info(f"Active threads after test ({len(active_threads)}): {[t.name for t in active_threads]}")
-        
+
         # Show elapsed time
         elapsed = time.time() - start_time
         logging.info(f"Completed test: {item.nodeid} ({elapsed:.2f}s)")
-    
+
     return True
 
-# Auto-timeout for test session
+
 @pytest.hookimpl(trylast=True)
 def pytest_configure(config):
     # Only start timeout if not already configured and not in xdist worker
@@ -116,7 +116,7 @@ def start_global_timeout():
             # Use print instead of logging to avoid closed file issues
             print("Global timeout exceeded. Terminating test run.", file=sys.stderr, flush=True)
         os._exit(1)
-    
+
     # Explicitly set daemon to True to ensure it doesn't prevent shutdown
     thread = threading.Thread(target=timeout_thread, daemon=True)
     thread.start()
@@ -129,21 +129,22 @@ def start_global_timeout():
 def check_resource_leaks():
     # Record initial state
     starting_threads = set(threading.enumerate())
-    
+
     # Run the test
     yield
-    
+
     # Give a moment for cleanup
     time.sleep(0.1)  # Reduced sleep time
-    
+
     # Check which new threads are lingering
     ending_threads = set(threading.enumerate())
     new_threads = ending_threads - starting_threads
-    
+
     if new_threads:
         thread_names = [t.name for t in new_threads if t.is_alive() and not t.daemon]
         if thread_names:  # Only report non-daemon threads
             logging.warning(f"Potential thread leak detected: {thread_names}")
+
 
 @pytest.fixture(autouse=True)
 def default_options(request):
@@ -164,7 +165,7 @@ def default_options(request):
             '_internettlds': 'https://publicsuffix.org/list/effective_tld_names.dat',
             '_internettlds_cache': 72,
             '_genericusers': ",".join(SpiderFootHelpers.usernamesFromWordlists(['generic-usernames'])),
-            # PostgreSQL-only: use DSN format (tests should mock DB connections)
+            # PostgreSQL-only: use DSN format
             '__database': 'postgresql://spiderfoot@unified-postgres.blk.ing:5432/spiderfoot_test',
             '__dbtype': 'postgresql',
             '__modules__': None,
@@ -204,14 +205,14 @@ def session_cleanup():
     # Force cleanup at end of session - critical to prevent xdist communication errors
     import gc
     import threading
-    
+
     # Force garbage collection
     gc.collect()
-    
+
     # Clean up threads safely with proper error handling
     main_thread = threading.main_thread()
     from contextlib import suppress
-    
+
     for thread in threading.enumerate():
         if thread != main_thread and thread.is_alive():
             # FIXED: Don't try to set daemon on active threads - this causes RuntimeError
@@ -221,7 +222,7 @@ def session_cleanup():
                 if (hasattr(thread, '_target') and thread._target
                         and ('SpiderFoot' in str(thread._target) or 'test' in str(thread._target))):
                     thread.join(timeout=1.0)
-    
+
     # CRITICAL: Shutdown logging system BEFORE xdist tries to close communication pipes
     # This prevents BrokenPipeError and "I/O operation on closed file" errors
     with contextlib.suppress(Exception):
@@ -235,7 +236,7 @@ def session_cleanup():
                         if hasattr(handler, 'stream') and not handler.stream.closed:
                             logging.info("Session cleanup completed")
                         break  # Only log once if we can
-    
+
     # Now shutdown the logging system to clean up handlers and streams
     with contextlib.suppress(Exception):
         logging.shutdown()
