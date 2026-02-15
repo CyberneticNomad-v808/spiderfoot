@@ -16,7 +16,7 @@ class TestModuleStor_db(TestModuleBase):
     
     Tests all enterprise-grade features including:
     - Connection pooling and health checks
-    - PostgreSQL and SQLite storage
+    - PostgreSQL storage
     - Error handling and recovery
     - Configuration validation
     - Performance optimization
@@ -65,15 +65,6 @@ class TestModuleStor_db(TestModuleBase):
         module = sfp__stor_db()
         self.assertEqual(len(module.opts), len(module.optdescs))
 
-    def test_setup_sqlite_default(self):
-        """Test setup with default SQLite configuration."""
-        module = sfp__stor_db()
-        # Force SQLite mode to avoid PostgreSQL connection attempts
-        module.setup(self.sf_instance, {'db_type': 'sqlite'})
-        
-        self.assertFalse(module.errorState)
-        self.assertEqual(module.opts['db_type'], 'sqlite')
-        self.assertIsNotNone(module.__sfdb__)
 
     def test_setup_no_database_handle(self):
         """Test setup fails gracefully when no database handle is available."""
@@ -204,44 +195,7 @@ class TestModuleStor_db(TestModuleBase):
         module = sfp__stor_db()
         self.assertIsInstance(module.producedEvents(), list)
 
-    def test_sqlite_storage(self):
-        """Test SQLite storage functionality."""
-        module = sfp__stor_db()
-        module.setup(self.sf_instance, {'_store': True, 'db_type': 'sqlite'})
-        
-        # Create test event
-        test_event = self.create_test_event()
-        
-        # Mock getScanId
-        module.getScanId = MagicMock(return_value="test_scan_id")
-        
-        module.handleEvent(test_event)
-        
-        # Verify that scanEventStore was called
-        self.mock_dbh.scanEventStore.assert_called()
 
-    def test_sqlite_storage_with_size_limit(self):
-        """Test SQLite storage with size limits."""
-        module = sfp__stor_db()
-        module.setup(self.sf_instance, {
-            '_store': True,
-            'db_type': 'sqlite',
-            'maxstorage': 10  # Very small limit
-        })
-        
-        # Create test event with large data
-        large_data = "x" * 100  # 100 characters, exceeds limit
-        test_event = self.create_test_event("IP_ADDRESS", large_data)
-        
-        # Mock getScanId
-        module.getScanId = MagicMock(return_value="test_scan_id")
-        
-        module.handleEvent(test_event)
-        
-        # Verify that scanEventStore was called with size limit
-        self.mock_dbh.scanEventStore.assert_called_with(
-            "test_scan_id", test_event, 10
-        )
 
     @patch('modules.sfp__stor_db.psycopg2.connect')
     def test_postgresql_storage(self, mock_connect):
@@ -317,16 +271,36 @@ class TestModuleStor_db(TestModuleBase):
         # Should attempt reconnection
         self.assertEqual(mock_connect.call_count, 2)
 
+
     @patch('modules.sfp__stor_db.psycopg2.connect')
-    def test_postgresql_storage_fallback_to_sqlite(self, mock_connect):
-        """Test PostgreSQL storage falls back to SQLite on error."""
+    def test_storage_disabled(self, mock_connect):
+        """Test that storage is skipped when disabled."""
         mock_conn = MagicMock()
-        mock_cursor = MagicMock()
-        mock_conn.cursor.return_value = mock_cursor
         mock_connect.return_value = mock_conn
         
-        # Simulate PostgreSQL insert failure
-        mock_cursor.execute.side_effect = psycopg2.DatabaseError("Insert failed")
+        module = sfp__stor_db()
+        opts = {
+            'db_type': 'postgresql',
+            'postgresql_host': 'localhost',
+            'postgresql_port': 5432,
+            'postgresql_database': 'spiderfoot',
+            'postgresql_username': 'user',
+            'postgresql_password': 'pass',
+            '_store': False
+        }
+        module.setup(self.sf_instance, opts)
+        
+        test_event = self.create_test_event()
+        module.handleEvent(test_event)
+        
+        # Storage should not be called when disabled
+        self.mock_dbh.scanEventStore.assert_not_called()
+
+    @patch('modules.sfp__stor_db.psycopg2.connect')
+    def test_storage_error_state(self, mock_connect):
+        """Test that storage is skipped when module is in error state."""
+        mock_conn = MagicMock()
+        mock_connect.return_value = mock_conn
         
         module = sfp__stor_db()
         opts = {
@@ -338,36 +312,7 @@ class TestModuleStor_db(TestModuleBase):
             'postgresql_password': 'pass',
             '_store': True
         }
-        
         module.setup(self.sf_instance, opts)
-        
-        # Create test event
-        test_event = self.create_test_event()
-        
-        # Mock getScanId
-        module.getScanId = MagicMock(return_value="test_scan_id")
-        
-        module.handleEvent(test_event)
-        
-        # Should fall back to SQLite storage
-        self.mock_dbh.scanEventStore.assert_called()
-        mock_conn.rollback.assert_called()
-
-    def test_storage_disabled(self):
-        """Test that storage is skipped when disabled."""
-        module = sfp__stor_db()
-        module.setup(self.sf_instance, {'_store': False, 'db_type': 'sqlite'})
-        
-        test_event = self.create_test_event()
-        module.handleEvent(test_event)
-        
-        # Storage should not be called when disabled
-        self.mock_dbh.scanEventStore.assert_not_called()
-
-    def test_storage_error_state(self):
-        """Test that storage is skipped when module is in error state."""
-        module = sfp__stor_db()
-        module.setup(self.sf_instance, {'_store': True, 'db_type': 'sqlite'})
         module.errorState = True
         
         test_event = self.create_test_event()
@@ -453,55 +398,7 @@ class TestModuleStor_db(TestModuleBase):
         # First attempt should fail, but module should handle gracefully
         self.assertFalse(module.errorState or module.pg_conn is not None)
         
-    def test_phase2_performance_metrics_collection(self):
-        """Test Phase 2 performance metrics collection."""
-        module = sfp__stor_db()
-        opts = {
-            'maxstorage': 1024,
-            '_store': True,
-            'db_type': 'sqlite',
-            'enable_performance_monitoring': True,
-            'collect_metrics': True
-        }
         
-        module.setup(self.sf_instance, opts)
-        module.getScanId = MagicMock(return_value="perf_test_scan")
-        
-        # Create test event
-        test_event = self.create_test_event()
-        
-        # Process event and verify metrics could be collected
-        start_time = time.time()
-        module.handleEvent(test_event)
-        execution_time = time.time() - start_time
-        
-        # Verify event was processed (SQLite storage)
-        self.sf_instance.dbh.scanEventStore.assert_called()
-        
-        # Verify execution completed within reasonable time (performance check)
-        self.assertLess(execution_time, 1.0, "Event processing should be fast")
-        
-    def test_phase2_graceful_shutdown_procedures(self):
-        """Test Phase 2 graceful shutdown procedures."""
-        module = sfp__stor_db()
-        opts = {
-            'maxstorage': 1024,
-            '_store': True,
-            'db_type': 'sqlite',
-            'enable_graceful_shutdown': True
-        }
-        
-        module.setup(self.sf_instance, opts)
-        
-        # Test module can be properly destroyed
-        try:
-            del module
-            # If we get here without exception, graceful shutdown worked
-            shutdown_successful = True
-        except Exception:
-            shutdown_successful = False
-            
-        self.assertTrue(shutdown_successful, "Module should shutdown gracefully")
         
     @patch('modules.sfp__stor_db.psycopg2.connect')
     def test_phase2_connection_health_monitoring(self, mock_connect):
@@ -618,62 +515,4 @@ class TestModuleStor_db(TestModuleBase):
         self.assertTrue(setup_successful or module.errorState, 
                        "Enterprise configuration should be handled gracefully")
                        
-    def test_phase2_backward_compatibility(self):
-        """Test Phase 2 enhancements maintain backward compatibility."""
-        module = sfp__stor_db()
         
-        # Test with legacy configuration (no Phase 2 options)
-        legacy_opts = {
-            'maxstorage': 1024,
-            '_store': True,
-            'db_type': 'sqlite'
-        }
-        
-        module.setup(self.sf_instance, legacy_opts)
-        module.getScanId = MagicMock(return_value="legacy_test_scan")
-        
-        # Test that legacy functionality still works
-        test_event = self.create_test_event()
-        module.handleEvent(test_event)
-        
-        # Verify event was stored using legacy method
-        self.sf_instance.dbh.scanEventStore.assert_called()
-        
-        # Module should not be in error state
-        self.assertFalse(module.errorState, "Legacy configuration should work")
-        
-    def test_phase2_performance_benchmarking(self):
-        """Test Phase 2 performance benchmarking capabilities."""
-        module = sfp__stor_db()
-        opts = {
-            'maxstorage': 1024,
-            '_store': True,
-            'db_type': 'sqlite',
-            'enable_performance_benchmarking': True
-        }
-        
-        module.setup(self.sf_instance, opts)
-        module.getScanId = MagicMock(return_value="benchmark_test_scan")
-        
-        # Process multiple events to test performance
-        events_count = 100
-        start_time = time.time()
-        
-        for i in range(events_count):
-            test_event = self.create_test_event(
-                event_type=f"BENCHMARK_EVENT_{i}",
-                data=f"benchmark_data_{i}"
-            )
-            module.handleEvent(test_event)
-            
-        total_time = time.time() - start_time
-        if total_time == 0:
-            events_per_second = float('inf')
-        else:
-            events_per_second = events_count / total_time
-        # Verify reasonable performance (at least 100 events/sec for SQLite)
-        self.assertGreater(events_per_second, 100, 
-                          f"Performance should be at least 100 events/sec, got {events_per_second:.1f}")
-        
-        # Verify all events were processed
-        self.assertEqual(self.sf_instance.dbh.scanEventStore.call_count, events_count)

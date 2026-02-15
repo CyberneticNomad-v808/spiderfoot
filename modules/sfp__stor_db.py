@@ -103,15 +103,7 @@ class sfp__stor_db(SpiderFootPlugin):
         for opt in list(userOpts.keys()):
             self.opts[opt] = userOpts[opt]
 
-        # CRITICAL: Environment variables ALWAYS take precedence over saved settings
-        # This ensures Docker deployments use the correct database host
-        self.opts['db_type'] = os.environ['SPIDERFOOT_DB_TYPE'].lower()
-        self.opts['postgresql_host'] = os.environ['SPIDERFOOT_DB_HOST']
-        self.opts['postgresql_port'] = int(os.environ['SPIDERFOOT_DB_PORT'])
-        self.opts['postgresql_database'] = os.environ.get('SPIDERFOOT_DB_NAME') or os.environ['SPIDERFOOT_DB']
-        self.opts['postgresql_username'] = os.environ['SPIDERFOOT_DB_USER']
-        self.opts['postgresql_password'] = os.environ.get('SPIDERFOOT_DB_PASSWORD') or os.environ.get('SPIDERFOOT_DB_PASS', '')
-
+      
         # Validate configuration
         if not self._validateConfig():
             self.errorState = True

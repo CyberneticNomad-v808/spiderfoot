@@ -8,19 +8,15 @@ import threading
 from pathlib import Path
 from _pytest.runner import runtestprotocol
 
-# Set required environment variables BEFORE any SpiderFoot imports
-# These are required by sfp__stor_db which reads os.environ at class definition time
-SPIDERFOOT_DB_TYPE = 'postgresql'
-SPIDERFOOT_DB_HOST = 'op://DEV_VAULT/local_infra/SPIDERFOOT_DB_HOST'
-SPIDERFOOT_DB_PORT = 'op://DEV_VAULT/local_infra/SPIDERFOOT_DB_PORT'
-SPIDERFOOT_DB_NAME = 'op://DEV_VAULT/local_infra/SPIDERFOOT_DB_NAME'
-SPIDERFOOT_DB_USER = 'op://DEV_VAULT/local_infra/SPIDERFOOT_DB_USER'
-SPIDERFOOT_DB_PASSWORD = 'op://DEV_VAULT/local_infra/SPIDERFOOT_DB_PASSWORD'
-# Password MUST be set via environment variable - no default for security
-if not 'SPIDERFOOT_DB_PASSWORD':
+# Verify required environment variables are set BEFORE any SpiderFoot imports
+# These should be provided by: op run --env-file="./.env.test" -- pytest ...
+required_vars = ['SPIDERFOOT_DB_TYPE', 'SPIDERFOOT_DB_HOST', 'SPIDERFOOT_DB_PORT',
+                 'SPIDERFOOT_DB_NAME', 'SPIDERFOOT_DB_USER', 'SPIDERFOOT_DB_PASSWORD']
+missing = [v for v in required_vars if not os.environ.get(v)]
+if missing:
     raise EnvironmentError(
-        "SPIDERFOOT_DB_PASSWORD environment variable is required for tests.\n"
-        "Set it with: export SPIDERFOOT_DB_PASSWORD='your_password'"
+        f"Required environment variables not set: {', '.join(missing)}\n"
+        "Run tests with: op run --env-file='./.env.test' -- pytest ..."
     )
 
 # Ensure we're in the correct directory for tests
