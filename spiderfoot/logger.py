@@ -70,10 +70,10 @@ class SpiderFootSqliteLogHandler(logging.Handler):
                 batch_items.append(item)
             except:
                 break
-        
+
         if batch_items:
             self.batch.extend(batch_items)
-        
+
         if len(self.batch) >= self.batch_size:
             self.process_log_batch()
 
@@ -81,20 +81,20 @@ class SpiderFootSqliteLogHandler(logging.Handler):
         """Process a batch of log records."""
         if not self.batch:
             return
-            
+
         batch = self.batch[:]
         self.batch = []
-        
+
         if self.dbh is None:
             # Create a new database handle when the first log batch is processed
             self.makeDbh()
-        
+
         if self.dbh is None:
             # If still no database handle, put items back in batch and log error
             print(f"[ERROR] Cannot create database handle for logging, retaining {len(batch)} log entries")
             self.batch = batch + self.batch  # Prepend failed batch to current batch
             return
-            
+
         logResult = self.dbh.scanLogEvents(batch)
         if logResult is False:
             print(f"[WARNING] Log batch insert failed, attempting to recreate database handle")
@@ -190,7 +190,7 @@ def logListenerSetup(loggingQueue, opts: dict = None) -> 'logging.handlers.Queue
         opts = dict()
     doLogging = opts.get("__logging", True)
     debug = opts.get("_debug", False)
-    
+
     # Determine log level - if __logging is False (quiet mode), use WARNING level
     if not doLogging:
         logLevel = logging.WARNING

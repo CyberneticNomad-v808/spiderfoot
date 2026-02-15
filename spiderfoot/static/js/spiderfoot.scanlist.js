@@ -1,7 +1,7 @@
-globalTypes = null;
-globalFilter = null;
-lastChecked = null;
-currentRequest = null;
+let globalTypes = null;
+let globalFilter = null;
+let lastChecked = null;
+let currentRequest = null;
 
 function switchSelectAll() {
     if (!$("#checkall")[0].checked) {
@@ -31,7 +31,7 @@ function filter(type) {
 }
 
 function getSelected() {
-    ids = [];
+    let ids = [];
     $("input[id*=cb_]").each(function(i, obj) {
         if (obj.checked) {
             ids[ids.length] = obj.id.replace("cb_", "");
@@ -52,7 +52,7 @@ function stopScan(id) {
 }
 
 function stopSelected() {
-    ids = getSelected();
+    let ids = getSelected();
     if (!ids) {
         alertify.message("Could not stop scans. No scans selected.");
         return;
@@ -72,7 +72,7 @@ function deleteScan(id) {
 }
 
 function deleteSelected() {
-    ids = getSelected();
+    let ids = getSelected();
     if (!ids) {
         alertify.message("Could not delete scans. No scans selected.");
         return;
@@ -85,7 +85,7 @@ function deleteSelected() {
 }
 
 function rerunSelected() {
-    ids = getSelected();
+    let ids = getSelected();
     if (!ids) {
         alertify.message("Could not re-run scan. No scans selected.");
         return;
@@ -96,7 +96,7 @@ function rerunSelected() {
 }
 
 function exportSelected(type) {
-    ids = getSelected();
+    let ids = getSelected();
 
     if (!ids) {
         sf.log("Error: no scan(s) selected");
@@ -158,7 +158,7 @@ function showlist(types, filter) {
             success: function(data) {                if (data.length == 0) {
                     $("#loader").fadeOut(500);
                     $("#scanIdHelp").hide(); // Hide tip when no scans
-                    welcome = "<div class='alert alert-info'>";
+                    let welcome = "<div class='alert alert-info'>";
                     welcome += "<h4>No scan history</h4><br>";
                     welcome += "There is currently no history of previously run scans. Please click 'New Scan' to initiate a new scan."
                     welcome += "</div>";
@@ -335,7 +335,7 @@ function showlisttable(types, filter, data) {
 
         buttons += "</div>";        var table = "<table id='scanlist' class='table table-bordered table-striped'>";
         table += "<thead><tr><th class='sorter-false text-center'><input id='checkall' type='checkbox'></th> <th>Scan ID</th> <th>Name</th> <th>Target</th> <th>Started</th> <th >Finished</th> <th class='text-center'>Status</th> <th class='text-center'>Elements</th><th class='text-center'>Correlations</th><th class='sorter-false text-center'>Action</th> </tr></thead><tbody>";
-        filtered = 0;
+        let filtered = 0;
         for (var i = 0; i < data.length; i++) {
             if (types != null && $.inArray(data[i][6], types) === -1) {
                 filtered++;

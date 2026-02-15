@@ -24,30 +24,26 @@ class TestSpiderFootWorkspaceComprehensive:
 
     @pytest.fixture(autouse=True)
     def setup_test_environment(self):
-        """Set up test environment with mocked dependencies."""
-        # Create temporary database for testing
-        self.temp_db = tempfile.NamedTemporaryFile(delete=False, suffix='.db')
-        self.temp_db.close()
-        
-        # Mock configuration
+        """Set up test environment with PostgreSQL test database."""
+        db_host = os.environ.get('SPIDERFOOT_DB_HOST', 'unified-postgres.blk.ing')
+        db_port = os.environ.get('SPIDERFOOT_DB_PORT', '5432')
+        db_name = os.environ.get('SPIDERFOOT_DB_NAME', 'spiderfoot_test')
+        db_user = os.environ.get('SPIDERFOOT_DB_USER', 'spiderfoot')
+        db_pass = os.environ.get('SPIDERFOOT_DB_PASSWORD', '')
+
+        dsn = f"postgresql://{db_user}:{db_pass}@{db_host}:{db_port}/{db_name}"
+
         self.config = {
-            '__database': self.temp_db.name,
+            '__database': dsn,
             '__datasource_cache_dir': tempfile.mkdtemp(),
             'logging': {'file': ''},
             'host': 'localhost',
             'port': 8080
         }
-        
-        # Initialize database
+
         self.db = SpiderFootDb(self.config)
-        
+
         yield
-        
-        # Cleanup
-        try:
-            os.unlink(self.temp_db.name)
-        except:
-            pass
 
     def test_workspace_creation_new(self):
         """Test creating a new workspace."""

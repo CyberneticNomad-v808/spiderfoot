@@ -1,21 +1,22 @@
 # Documentation Location
 
-**Current Location:** `/stuff/coding_standards/spiderfoot-as-is-documentation/`
-**Previous Location:** `.claude/specs/spiderfoot-as-is/` (deprecated)
-**Date Moved:** 2025-11-04
+**Current Location:** `/stuff/spiderfoot/spiderfoot-as-is-documentation/`
+**Previous Location:** `.trash/spiderfoot-as-is-documentation/` (restored 2026-02-06)
+**Original Location:** `.claude/specs/spiderfoot-as-is/` (deprecated)
+**Date Restored:** 2026-02-06
 
 ---
 
 ## Why This Location?
 
-This documentation has been moved to `/stuff/coding_standards/` to centralize all coding standards, documentation, and best practices in one location.
+This documentation lives in the SpiderFoot project root alongside the code it documents. A planned move to `/stuff/coding_standards/` was never completed.
 
 ---
 
 ## Structure
 
 ```
-/stuff/coding_standards/spiderfoot-as-is-documentation/
+/stuff/spiderfoot/spiderfoot-as-is-documentation/
 ├── README.md                           # Quick start guide
 ├── INDEX.md                            # Complete documentation index
 ├── SUMMARY.md                          # Project completion summary
@@ -52,12 +53,12 @@ These commands have been updated to point to this new location.
 
 **From SpiderFoot project:**
 ```bash
-cd /stuff/coding_standards/spiderfoot-as-is-documentation/
+cd /stuff/spiderfoot/spiderfoot-as-is-documentation/
 ```
 
 **From anywhere:**
 ```bash
-cd /stuff/coding_standards/spiderfoot-as-is-documentation/
+cd /stuff/spiderfoot/spiderfoot-as-is-documentation/
 ```
 
 ---
@@ -65,11 +66,11 @@ cd /stuff/coding_standards/spiderfoot-as-is-documentation/
 ## Maintenance
 
 When updating documentation:
-1. Update files in this location (`/stuff/coding_standards/spiderfoot-as-is-documentation/`)
+1. Update files in this location (`/stuff/spiderfoot/spiderfoot-as-is-documentation/`)
 2. Do NOT update the old `.claude/specs/` location
 3. Use `/spec-validate` to check health after updates
 4. Update regression registry when tracking new bugs
 
 ---
 
-**Last Updated:** 2025-11-04
+**Last Updated:** 2026-02-06

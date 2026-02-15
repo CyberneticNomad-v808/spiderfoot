@@ -1,8 +1,8 @@
-    tabs = [ "use", "type", "module" ];
-    activeTab = "use";
+    let tabs = [ "use", "type", "module" ];
+    let activeTab = "use";
 
     function submitForm() {
-        list = "";
+        let list = "";
         
         // Handle different tab types
         if (activeTab === "use") {
@@ -26,7 +26,7 @@
             $("#"+activeTab+"list").val(list);
             
             // Clear other lists
-            for (i = 0; i < tabs.length; i++) {
+            for (let i = 0; i < tabs.length; i++) {
                 if (tabs[i] != activeTab && tabs[i] != "use") {
                     $("#"+tabs[i]+"list").val("");
                 }

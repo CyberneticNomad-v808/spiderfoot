@@ -49,45 +49,45 @@ async def list_correlation_rules(
 ):
     """
     List correlation rules with optional filtering.
-    
+
     Args:
         risk: Filter by risk level (HIGH, MEDIUM, LOW, INFO)
         enabled: Filter by enabled status
         tag: Filter by tag
         limit: Maximum number of rules to return
         offset: Number of rules to skip
-        
+
     Returns:
         List of correlation rules
     """
     try:
         config = get_app_config()
         dbh = SpiderFootDb(config.get_config())
-        
+
         # Get all correlation rules from config
         correlation_rules = config.get_config().get('__correlationrules__', [])
-        
+
         # Apply filters
         filtered_rules = []
         for rule in correlation_rules:
             # Risk filter
             if risk and rule.get('risk', '').upper() != risk.upper():
                 continue
-                
+
             # Enabled filter
             if enabled is not None and rule.get('enabled', True) != enabled:
                 continue
-                
+
             # Tag filter
             if tag and tag not in rule.get('tags', []):
                 continue
-                
+
             filtered_rules.append(rule)
-        
+
         # Apply pagination
         total = len(filtered_rules)
         paginated_rules = filtered_rules[offset:offset + limit]
-        
+
         return {
             "rules": paginated_rules,
             "total": total,
@@ -95,7 +95,7 @@ async def list_correlation_rules(
             "offset": offset,
             "has_more": offset + limit < total
         }
-        
+
     except Exception as e:
         logger.error(f"Failed to list correlation rules: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to list correlation rules: {e}") from e
@@ -108,21 +108,21 @@ async def create_correlation_rule(
 ):
     """
     Create a new correlation rule.
-    
+
     Args:
         rule_data: Correlation rule data
-        
+
     Returns:
         Created rule with assigned ID
     """
     try:
         config = get_app_config()
         dbh = SpiderFootDb(config.get_config())
-        
+
         # Generate unique rule ID
         import uuid
         rule_id = str(uuid.uuid4())
-        
+
         # Create rule object
         new_rule = {
             "id": rule_id,
@@ -135,25 +135,25 @@ async def create_correlation_rule(
             "created": datetime.now().isoformat(),
             "modified": datetime.now().isoformat()
         }
-        
+
         # Get current rules
         current_config = config.get_config()
         correlation_rules = current_config.get('__correlationrules__', [])
-        
+
         # Add new rule
         correlation_rules.append(new_rule)
         current_config['__correlationrules__'] = correlation_rules
-        
+
         # Save configuration
         config_str = json.dumps(current_config)
         dbh.configSet(config_str)
-        
+
         logger.info(f"Created correlation rule: {rule_id}")
         return {
             "rule": new_rule,
             "message": "Correlation rule created successfully"
         }
-        
+
     except Exception as e:
         logger.error(f"Failed to create correlation rule: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to create correlation rule: {e}") from e
@@ -166,29 +166,29 @@ async def get_correlation_rule(
 ):
     """
     Get a specific correlation rule by ID.
-    
+
     Args:
         rule_id: Rule identifier
-        
+
     Returns:
         Correlation rule details
     """
     try:
         config = get_app_config()
         correlation_rules = config.get_config().get('__correlationrules__', [])
-        
+
         # Find rule by ID
         rule = None
         for r in correlation_rules:
             if r.get('id') == rule_id:
                 rule = r
                 break
-        
+
         if not rule:
             raise HTTPException(status_code=404, detail="Correlation rule not found")
-        
+
         return {"rule": rule}
-        
+
     except HTTPException:
         raise
     except Exception as e:
@@ -204,22 +204,22 @@ async def update_correlation_rule(
 ):
     """
     Update a correlation rule.
-    
+
     Args:
         rule_id: Rule identifier
         rule_data: Updated rule data
-        
+
     Returns:
         Updated rule
     """
     try:
         config = get_app_config()
         dbh = SpiderFootDb(config.get_config())
-        
+
         # Get current rules
         current_config = config.get_config()
         correlation_rules = current_config.get('__correlationrules__', [])
-        
+
         # Find and update rule
         rule_found = False
         for i, rule in enumerate(correlation_rules):
@@ -237,26 +237,26 @@ async def update_correlation_rule(
                     rule['enabled'] = rule_data.enabled
                 if rule_data.tags is not None:
                     rule['tags'] = rule_data.tags
-                
+
                 rule['modified'] = datetime.now().isoformat()
                 correlation_rules[i] = rule
                 rule_found = True
                 break
-        
+
         if not rule_found:
             raise HTTPException(status_code=404, detail="Correlation rule not found")
-        
+
         # Save configuration
         current_config['__correlationrules__'] = correlation_rules
         config_str = json.dumps(current_config)
         dbh.configSet(config_str)
-        
+
         logger.info(f"Updated correlation rule: {rule_id}")
         return {
             "rule": correlation_rules[i] if rule_found else None,
             "message": "Correlation rule updated successfully"
         }
-        
+
     except HTTPException:
         raise
     except Exception as e:
@@ -271,21 +271,21 @@ async def delete_correlation_rule(
 ):
     """
     Delete a correlation rule.
-    
+
     Args:
         rule_id: Rule identifier
-        
+
     Returns:
         Deletion confirmation
     """
     try:
         config = get_app_config()
         dbh = SpiderFootDb(config.get_config())
-        
+
         # Get current rules
         current_config = config.get_config()
         correlation_rules = current_config.get('__correlationrules__', [])
-        
+
         # Find and remove rule
         rule_found = False
         for i, rule in enumerate(correlation_rules):
@@ -293,18 +293,18 @@ async def delete_correlation_rule(
                 removed_rule = correlation_rules.pop(i)
                 rule_found = True
                 break
-        
+
         if not rule_found:
             raise HTTPException(status_code=404, detail="Correlation rule not found")
-        
+
         # Save configuration
         current_config['__correlationrules__'] = correlation_rules
         config_str = json.dumps(current_config)
         dbh.configSet(config_str)
-        
+
         logger.info(f"Deleted correlation rule: {rule_id}")
         return {"message": "Correlation rule deleted successfully"}
-        
+
     except HTTPException:
         raise
     except Exception as e:
@@ -320,28 +320,28 @@ async def test_correlation_rule(
 ):
     """
     Test a correlation rule against provided data.
-    
+
     Args:
         rule_id: Rule identifier
         test_data: Test data to validate against rule
-        
+
     Returns:
         Test results
     """
     try:
         config = get_app_config()
         correlation_rules = config.get_config().get('__correlationrules__', [])
-        
+
         # Find rule by ID
         rule = None
         for r in correlation_rules:
             if r.get('id') == rule_id:
                 rule = r
                 break
-        
+
         if not rule:
             raise HTTPException(status_code=404, detail="Correlation rule not found")
-        
+
         # Simulate rule testing (in real implementation, this would use the correlation engine)
         test_result = {
             "rule_id": rule_id,
@@ -352,12 +352,12 @@ async def test_correlation_rule(
             "test_data_size": len(str(test_data)),
             "execution_time_ms": 15  # Simulated execution time
         }
-        
+
         return {
             "test_result": test_result,
             "message": "Rule test completed successfully"
         }
-        
+
     except HTTPException:
         raise
     except Exception as e:
@@ -377,28 +377,28 @@ async def get_detailed_scan_correlations(
 ):
     """
     Get detailed correlation analysis for a scan.
-    
+
     Args:
         scan_id: Scan identifier
         risk: Filter by risk level
         rule_id: Filter by specific rule
         include_raw_data: Include raw correlation data
-        
+
     Returns:
         Detailed correlation analysis
     """
     try:
         config = get_app_config()
         dbh = SpiderFootDb(config.get_config())
-        
+
         # Validate scan exists
         scan_info = dbh.scanInstanceGet(scan_id)
         if not scan_info:
             raise HTTPException(status_code=404, detail="Scan not found")
-        
+
         # Get correlations for scan
         correlations = dbh.scanCorrelationList(scan_id)
-        
+
         # Apply filters
         filtered_correlations = []
         for corr in correlations:
@@ -406,11 +406,11 @@ async def get_detailed_scan_correlations(
                 # Risk filter
                 if risk and len(corr) > 3 and corr[3].upper() != risk.upper():
                     continue
-                    
+
                 # Rule filter
                 if rule_id and len(corr) > 4 and corr[4] != rule_id:
                     continue
-                
+
                 # Build correlation object
                 correlation_obj = {
                     "id": corr[0] if len(corr) > 0 else None,
@@ -423,23 +423,23 @@ async def get_detailed_scan_correlations(
                     "count": corr[7] if len(corr) > 7 else 0,
                     "created": corr[8] if len(corr) > 8 else None
                 }
-                
+
                 # Add raw data if requested
                 if include_raw_data:
                     correlation_obj["raw_data"] = corr
-                
+
                 filtered_correlations.append(correlation_obj)
-        
+
         # Apply pagination
         total = len(filtered_correlations)
         paginated_correlations = filtered_correlations[offset:offset + limit]
-        
+
         # Calculate statistics
         risk_summary = {}
         for corr in filtered_correlations:
             risk_level = corr.get("risk", "UNKNOWN")
             risk_summary[risk_level] = risk_summary.get(risk_level, 0) + 1
-        
+
         return {
             "scan_id": scan_id,
             "scan_info": {
@@ -461,7 +461,7 @@ async def get_detailed_scan_correlations(
                 "has_more": offset + limit < total
             }
         }
-        
+
     except HTTPException:
         raise
     except Exception as e:
@@ -476,24 +476,24 @@ async def analyze_correlation_patterns(
 ):
     """
     Perform advanced correlation pattern analysis across multiple scans.
-    
+
     Args:
         analysis_request: Analysis configuration including scan IDs, rules, and options
-        
+
     Returns:
         Correlation pattern analysis results
     """
     try:
         config = get_app_config()
         dbh = SpiderFootDb(config.get_config())
-        
+
         scan_ids = analysis_request.get('scan_ids', [])
         rule_ids = analysis_request.get('rule_ids', [])
         time_range = analysis_request.get('time_range', {})
-        
+
         if not scan_ids:
             raise HTTPException(status_code=400, detail="No scan IDs provided for analysis")
-        
+
         # Perform pattern analysis (simplified implementation)
         patterns = {
             "cross_scan_patterns": [],
@@ -501,7 +501,7 @@ async def analyze_correlation_patterns(
             "risk_escalation_patterns": [],
             "common_correlations": []
         }
-        
+
         # Get correlations for all specified scans
         all_correlations = []
         for scan_id in scan_ids:
@@ -512,7 +512,7 @@ async def analyze_correlation_patterns(
                         "scan_id": scan_id,
                         "correlation_data": corr
                     })
-        
+
         # Analyze patterns (simplified)
         rule_frequency = {}
         for corr in all_correlations:
@@ -520,7 +520,7 @@ async def analyze_correlation_patterns(
             if len(corr_data) > 2:
                 rule_name = corr_data[2]
                 rule_frequency[rule_name] = rule_frequency.get(rule_name, 0) + 1
-        
+
         # Build common correlations
         for rule, frequency in sorted(rule_frequency.items(), key=lambda x: x[1], reverse=True)[:10]:
             patterns["common_correlations"].append({
@@ -528,7 +528,7 @@ async def analyze_correlation_patterns(
                 "frequency": frequency,
                 "affected_scans": frequency  # Simplified
             })
-        
+
         return {
             "analysis_id": f"analysis_{int(datetime.now().timestamp())}",
             "scan_count": len(scan_ids),
@@ -537,7 +537,7 @@ async def analyze_correlation_patterns(
             "analysis_timestamp": datetime.now().isoformat(),
             "analysis_duration_ms": 250  # Simulated
         }
-        
+
     except HTTPException:
         raise
     except Exception as e:

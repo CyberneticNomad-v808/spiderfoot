@@ -20,7 +20,7 @@ os.environ.setdefault('SPIDERFOOT_DB_HOST', 'localhost')
 os.environ.setdefault('SPIDERFOOT_DB_PORT', '5432')
 os.environ.setdefault('SPIDERFOOT_DB_NAME', 'spiderfoot_test')
 os.environ.setdefault('SPIDERFOOT_DB_USER', 'spiderfoot')
-os.environ.setdefault('SPIDERFOOT_DB_PASSWORD', '')
+os.environ.setdefault('SPIDERFOOT_DB_PASSWORD', 'test_password')
 
 try:
     import psutil

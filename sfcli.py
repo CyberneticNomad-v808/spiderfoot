@@ -20,6 +20,7 @@ import io
 import json
 import re
 import shlex
+import subprocess
 import time
 from os.path import expanduser
 import difflib
@@ -721,7 +722,13 @@ class SpiderFootCli(cmd.Cmd):
     def do_shell(self, line):
         """Shell Run a shell command locally."""
         self.dprint("Running shell command:" + str(line))
-        self.dprint(os.popen(line).read(), plain=True)  # noqa: DUO106
+        try:
+            result = subprocess.run(line, shell=True, capture_output=True, text=True)  # nosec: B605
+            self.dprint(result.stdout, plain=True)
+            if result.stderr:
+                self.dprint(result.stderr, err=True)
+        except Exception as e:
+            self.edprint(f"Failed to execute command: {e}")
 
     def do_clear(self, line):
         """Clear Clear the screen."""

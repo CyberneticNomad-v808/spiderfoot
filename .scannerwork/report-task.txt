@@ -1,6 +1,6 @@
-projectKey=number-two-scope
-serverUrl=https://sonarqube.blking.lan
-serverVersion=25.10.0.114319
-dashboardUrl=https://sonarqube.blking.lan/dashboard?id=number-two-scope
-ceTaskId=f5eca9ec-b51f-4eea-b93a-ab182b8ffc13
-ceTaskUrl=https://sonarqube.blking.lan/api/ce/task?id=f5eca9ec-b51f-4eea-b93a-ab182b8ffc13
+projectKey=blkc-spiderfoot
+serverUrl=https://sonar.blk.ing
+serverVersion=26.1.0.118079
+dashboardUrl=https://sonar.blk.ing/dashboard?id=blkc-spiderfoot
+ceTaskId=fa6c42e1-eee5-45f1-9edd-d0734402ec66
+ceTaskUrl=https://sonar.blk.ing/api/ce/task?id=fa6c42e1-eee5-45f1-9edd-d0734402ec66

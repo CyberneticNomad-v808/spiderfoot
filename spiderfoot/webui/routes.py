@@ -94,16 +94,19 @@ class WebUiRoutes(SettingsEndpoints, ScanEndpoints, ExportEndpoints, WorkspaceEn
         # This ensures PostgreSQL is used when configured via environment
         db_type = os.getenv('SPIDERFOOT_DB_TYPE', 'sqlite').lower()
         if db_type == 'postgresql':
-            db_host = os.getenv('SPIDERFOOT_DB_HOST', 'localhost')
+            db_host = os.getenv('SPIDERFOOT_DB_HOST')
             db_port = os.getenv('SPIDERFOOT_DB_PORT', '5432')
             db_name = os.getenv('SPIDERFOOT_DB', 'spiderfoot_db')
             db_user = os.getenv('SPIDERFOOT_DB_USER', 'postgres')
-            db_pass = os.getenv('SPIDERFOOT_DB_PASSWORD', '')
+            db_pass = os.getenv('SPIDERFOOT_DB_PASSWORD')
+
+            if not db_pass:
+                raise ValueError("SPIDERFOOT_DB_PASSWORD environment variable is required")
+            if not db_host:
+                raise ValueError("SPIDERFOOT_DB_HOST environment variable is required")
+
             # Use DSN URI format: postgresql://user:password@host:port/database
-            if db_pass:
-                self.defaultConfig['__database'] = f"postgresql://{quote_plus(db_user)}:{quote_plus(db_pass)}@{db_host}:{db_port}/{db_name}"
-            else:
-                self.defaultConfig['__database'] = f"postgresql://{quote_plus(db_user)}@{db_host}:{db_port}/{db_name}"
+            self.defaultConfig['__database'] = f"postgresql://{quote_plus(db_user)}:{quote_plus(db_pass)}@{db_host}:{db_port}/{db_name}"
             self.defaultConfig['__dbtype'] = 'postgresql'
 
         # Now initialize database and load saved config

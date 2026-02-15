@@ -45,7 +45,7 @@ if sys.version_info >= (3, 8):  # PEP 589 support (TypedDict)
         url: str
         text: str
         title: typing.Optional[str]
-        
+
 else:
     _GraphNode = typing.Dict[str, typing.Union[str, int]]
     _GraphEdge = typing.Dict[str, str]
@@ -59,7 +59,7 @@ EmptyTree = typing.Dict[None, object]
 
 class SpiderFootHelpers():
     """SpiderFoot helper functions and utilities."""
-    
+
     @staticmethod
     def dataPath() -> str:
         """Return data path and validate it exists"""
@@ -104,11 +104,11 @@ class SpiderFootHelpers():
             if not os.path.exists(fallback_dir):
                 os.makedirs(fallback_dir, exist_ok=True)
             return fallback_dir
-        
+
     @staticmethod
     def genScanInstanceId() -> str:
         """Generate a unique scan instance ID.
-        
+
         Returns:
             str: Unique scan ID
         """
@@ -117,16 +117,16 @@ class SpiderFootHelpers():
     @staticmethod
     def targetTypeFromString(target: str) -> typing.Optional[str]:
         """Determine target type from string.
-        
+
         Args:
             target: Target string
-            
+
         Returns:
             Target type or None if invalid
         """
         if not target:
             return None
-            
+
         # Check for quoted username/human name first (before stripping quotes)
         if target.startswith('"') and target.endswith('"') and len(target) > 2:
             inner = target[1:-1]
@@ -135,10 +135,10 @@ class SpiderFootHelpers():
                 return "HUMAN_NAME"
             # Otherwise, it's a username
             return "USERNAME"
-            
+
         # Remove quotes for other checks
         stripped_target = target.strip('"\'')
-        
+
         # IP address
         try:
             import ipaddress
@@ -146,8 +146,8 @@ class SpiderFootHelpers():
             return "IP_ADDRESS"
         except ValueError:
             pass
-            
-        # IPv6 address  
+
+        # IPv6 address
         try:
             import ipaddress
             ip = ipaddress.ip_address(stripped_target)
@@ -155,7 +155,7 @@ class SpiderFootHelpers():
                 return "IPV6_ADDRESS"
         except ValueError:
             pass
-            
+
         # IP network
         try:
             import ipaddress
@@ -166,34 +166,34 @@ class SpiderFootHelpers():
                 return "NETBLOCK_OWNER"
         except ValueError:
             pass
-            
+
         # Email
         if re.match(r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$', stripped_target):
             return "EMAILADDR"
-            
+
         # Phone number
         if re.match(r'^\+?[\d\s\-\(\)]{7,15}$', stripped_target):
             return "PHONE_NUMBER"
-            
+
         # Human name (contains space and letters) - unquoted
         if ' ' in stripped_target and re.match(r'^[a-zA-Z\s]+$', stripped_target):
             return "HUMAN_NAME"
-            
+
         # Bitcoin address
         if re.match(r'^[13][a-km-zA-HJ-NP-Z1-9]{25,34}$|^bc1[a-z0-9]{39,59}$', stripped_target):
             return "BITCOIN_ADDRESS"
-            
+
         # BGP AS number
         if re.match(r'^\d+$', stripped_target) and len(stripped_target) <= 10:
             return "BGP_AS_OWNER"
               # Check if it's a username pattern
         if stripped_target.startswith('@') or stripped_target.lower().startswith('username:'):
             return 'USERNAME'
-            
+
         # Domain/hostname - do this last as it's most permissive
         if re.match(r'^[a-zA-Z0-9]([a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?)*$', stripped_target):
             return "INTERNET_NAME"
-        
+
         return None
 
     @staticmethod
@@ -201,32 +201,32 @@ class SpiderFootHelpers():
         """Load modules as dictionary"""
         if ignore_files is not None and not isinstance(ignore_files, list):
             raise TypeError("ignore_files must be a list or None")
-            
+
         if not os.path.exists(path):
             raise FileNotFoundError(f"[Errno 2] No such file or directory: '{path}'")
-        
+
         if ignore_files is None:
             ignore_files = []
-        
+
         modules = {}
-        
+
         for filename in os.listdir(path):
             if not filename.endswith('.py') or filename in ignore_files:
                 continue
-                
+
             module_name = filename[:-3]  # Remove .py extension
             file_path = os.path.join(path, filename)
-            
+
             try:
                 import importlib.util
                 spec = importlib.util.spec_from_file_location(module_name, file_path)
                 if spec and spec.loader:
                     module = importlib.util.module_from_spec(spec)
                     spec.loader.exec_module(module)
-                    
+
                     # Try to find the main class - look for various naming patterns
                     mod_class = None
-                    
+
                     # First try: exact module name match
                     if hasattr(module, module_name):
                         mod_class = getattr(module, module_name)
@@ -234,19 +234,19 @@ class SpiderFootHelpers():
                         # Second try: look for any class that inherits from SpiderFootPlugin
                         for attr_name in dir(module):
                             attr = getattr(module, attr_name)
-                            if (isinstance(attr, type) and 
+                            if (isinstance(attr, type) and
                                 hasattr(attr, '__bases__') and
                                 any('SpiderFootPlugin' in str(base) for base in attr.__bases__)):
                                 mod_class = attr
                                 # Set the expected attribute name for tests
                                 setattr(module, module_name, mod_class)
                                 break
-                    
+
                     if mod_class and hasattr(mod_class, 'opts') and hasattr(mod_class, 'meta'):
                         # Ensure the class has __name__ attribute
                         if not hasattr(mod_class, '__name__'):
                             setattr(mod_class, '__name__', module_name)
-                            
+
                         modules[module_name] = {
                             'name': getattr(mod_class, 'meta', {}).get('name', module_name),
                             'descr': getattr(mod_class, '__doc__', ''),
@@ -260,7 +260,7 @@ class SpiderFootHelpers():
                             'group': getattr(mod_class, 'meta', {}).get('useCases', [])                        }
             except Exception:
                 continue
-        
+
         return modules
 
     @staticmethod
@@ -268,21 +268,21 @@ class SpiderFootHelpers():
         """Load correlation rules"""
         if ignore_files is not None and not isinstance(ignore_files, list):
             raise TypeError("ignore_files must be a list or None")
-            
+
         if not os.path.exists(path):
             raise FileNotFoundError(f"[Errno 2] No such file or directory: '{path}'")
-        
+
         if ignore_files is None:
             ignore_files = []
-        
+
         rules = []
-        
+
         for filename in os.listdir(path):
             if not filename.endswith('.yaml') or filename in ignore_files:
                 continue
-                
+
             file_path = os.path.join(path, filename)
-            
+
             try:
                 import yaml
                 with open(file_path, 'r') as f:
@@ -291,7 +291,7 @@ class SpiderFootHelpers():
                         rules.append(rule_data)
             except Exception:
                 continue
-                
+
         return rules
 
     @staticmethod
@@ -325,10 +325,10 @@ class SpiderFootHelpers():
     @staticmethod
     def urlBaseDir(url: str) -> str:
         """Extract base directory from full URL.
-        
+
         Args:
             url: Full URL
-            
+
         Returns:
             Base directory
         """
@@ -339,16 +339,16 @@ class SpiderFootHelpers():
     @staticmethod
     def urlRelativeToAbsolute(url: str) -> str:
         """Convert relative URL paths to absolute.
-        
+
         Args:
             url: URL that may contain relative paths
-            
+
         Returns:
             Absolute URL
         """
         if not url:
             return url
-            
+
         # Handle relative path components like ../
         parts = url.split('/')
         stack = []
@@ -365,7 +365,7 @@ class SpiderFootHelpers():
         """Sanitise input string"""
         if not isinstance(input_str, str):
             return False
-        
+
         # Check for invalid patterns
         if input_str.endswith('/'):
             return False
@@ -375,7 +375,7 @@ class SpiderFootHelpers():
             return False
         if len(input_str) <= 2:
             return False
-        
+
         # Escape HTML characters
         sanitized = html.escape(input_str)
         return sanitized
@@ -465,7 +465,7 @@ class SpiderFootHelpers():
                         words.add(w.strip().lower().split('/')[0])
             except Exception as e:
                 raise IOError(f"Could not read wordlist file '{d}.txt'") from e
-        
+
         return words
 
     @staticmethod
@@ -856,7 +856,7 @@ class SpiderFootHelpers():
                 for domain in domains:
                     if absLink is None and domain.lower() in link.lower():
                         absLink = proto + '://' + link
-                
+
                 # Otherwise, it's a flat link within the current directory
                 if absLink is None:
                     absLink = SpiderFootHelpers.urlBaseDir(url) + link
@@ -1221,21 +1221,21 @@ class SpiderFootHelpers():
     @staticmethod
     def fixModuleImport(module, module_name=None):
         """Fix module imports to ensure proper class attributes for tests.
-        
+
         Args:
             module: The imported module object
             module_name: Optional module name, will be inferred if not provided
-            
+
         Returns:
             The module object with fixed attributes
         """
         if module_name is None:
             module_name = getattr(module, '__name__', '').split('.')[-1]
-        
+
         # Skip if not a SpiderFoot module
         if not module_name.startswith('sfp_'):
             return module
-            
+
         try:
             # Check if the expected class attribute already exists
             if hasattr(module, module_name):
@@ -1244,26 +1244,26 @@ class SpiderFootHelpers():
                 if not hasattr(mod_class, '__name__'):
                     setattr(mod_class, '__name__', module_name)
                 return module
-            
+
             # Look for any class that inherits from SpiderFootPlugin
             for attr_name in dir(module):
                 attr = getattr(module, attr_name)
-                if (isinstance(attr, type) and 
+                if (isinstance(attr, type) and
                     hasattr(attr, '__bases__') and
                     any('SpiderFootPlugin' in str(base) for base in attr.__bases__)):
-                    
+
                     # Set the expected attribute name for tests
                     setattr(module, module_name, attr)
-                    
+
                     # Ensure the class has __name__ attribute
                     if not hasattr(attr, '__name__'):
                         setattr(attr, '__name__', module_name)
-                    
+
                     break
-                    
+
         except Exception:
             pass
-            
+
         return module
 
     @staticmethod
@@ -1275,10 +1275,10 @@ class SpiderFootHelpers():
 
 def fix_module_for_tests(module_name):
     """Fix a module to ensure it has the expected class attribute for tests.
-    
+
     This function ensures that modules have the expected sfp_modulename.sfp_modulename
     pattern that tests expect.
-    
+
     Args:
         module_name: Name of the module (e.g., 'sfp_zoomeye')
     """
@@ -1287,7 +1287,7 @@ def fix_module_for_tests(module_name):
         import importlib
         module_path = f'modules.{module_name}'
         module = importlib.import_module(module_path)
-        
+
         # Check if the expected class attribute already exists
         if hasattr(module, module_name):
             mod_class = getattr(module, module_name)
@@ -1295,23 +1295,23 @@ def fix_module_for_tests(module_name):
             if not hasattr(mod_class, '__name__'):
                 setattr(mod_class, '__name__', module_name)
             return module
-        
+
         # Look for any class that inherits from SpiderFootPlugin
         for attr_name in dir(module):
             attr = getattr(module, attr_name)
-            if (isinstance(attr, type) and 
+            if (isinstance(attr, type) and
                 hasattr(attr, '__bases__') and
                 any('SpiderFootPlugin' in str(base) for base in attr.__bases__)):
-                
+
                 # Set the expected attribute name for tests
                 setattr(module, module_name, attr)
-                
+
                 # Ensure the class has __name__ attribute
                 if not hasattr(attr, '__name__'):
                     setattr(attr, '__name__', module_name)
-                
+
                 break
-                
+
         return module
     except Exception:
         return None

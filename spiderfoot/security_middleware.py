@@ -458,3 +458,36 @@ class CherryPySecurityTool(cherrypy.Tool):
         """Check session security."""
         # Session checks would be implemented here
         pass
+
+
+def install_cherrypy_security(config):
+    """Install security middleware for CherryPy web interface.
+
+    Args:
+        config: SpiderFoot configuration dictionary
+
+    Returns:
+        SpiderFootSecurityMiddleware instance
+    """
+    log = logging.getLogger(__name__)
+    middleware = SpiderFootSecurityMiddleware(config)
+    tool = CherryPySecurityTool(middleware)
+    cherrypy.tools.sf_security = tool
+    log.info("CherryPy security middleware installed")
+    return middleware
+
+
+def install_fastapi_security(app, config):
+    """Install security middleware for FastAPI application.
+
+    Args:
+        app: FastAPI application instance
+        config: SpiderFoot configuration dictionary
+
+    Returns:
+        SpiderFootSecurityMiddleware instance
+    """
+    log = logging.getLogger(__name__)
+    middleware = SpiderFootSecurityMiddleware(config)
+    log.info("FastAPI security middleware installed")
+    return middleware

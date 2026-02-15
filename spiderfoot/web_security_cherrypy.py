@@ -22,10 +22,10 @@ from .security_logging import SecurityLogger, SecurityEventType, SecurityMonitor
 
 class SpiderFootSecurityManager:
     """Main security manager that integrates all security components for CherryPy."""
-    
+
     def __init__(self, app_config: dict = None):
         """Initialize security manager.
-        
+
         Args:
             app_config: CherryPy application configuration
         """
@@ -38,9 +38,9 @@ class SpiderFootSecurityManager:
         self.api_key_manager = None
         self.security_logger = None
         self.security_monitor = None
-        
+
         self.init_security()
-    
+
     def init_security(self) -> None:
         """Initialize security for CherryPy application."""
         self._init_security_logging()
@@ -53,7 +53,7 @@ class SpiderFootSecurityManager:
         self._init_request_validation()
         self._init_error_handlers()
         self._setup_cherrypy_tools()
-    
+
     def _init_security_logging(self) -> None:
         """Initialize security logging."""
         try:
@@ -62,7 +62,7 @@ class SpiderFootSecurityManager:
             self.security_monitor = SecurityMonitor(self.security_logger)
         except Exception as e:
             cherrypy.log(f"Failed to initialize security logging: {e}", severity=40)
-    
+
     def _init_csrf_protection(self) -> None:
         """Initialize CSRF protection."""
         try:
@@ -70,7 +70,7 @@ class SpiderFootSecurityManager:
             self.csrf_protection = CSRFProtection(secret_key=secret_key)
         except Exception as e:
             cherrypy.log(f"Failed to initialize CSRF protection: {e}", severity=40)
-    
+
     def _init_rate_limiting(self) -> None:
         """Initialize rate limiting."""
         try:
@@ -82,14 +82,14 @@ class SpiderFootSecurityManager:
             )
         except Exception as e:
             cherrypy.log(f"Failed to initialize rate limiting: {e}", severity=40)
-    
+
     def _init_config_management(self) -> None:
         """Initialize secure configuration management."""
         try:
             self.config_manager = SecureConfigManager()
         except Exception as e:
             cherrypy.log(f"Failed to initialize config management: {e}", severity=40)
-    
+
     def _init_session_management(self) -> None:
         """Initialize secure session management."""
         try:
@@ -100,7 +100,7 @@ class SpiderFootSecurityManager:
             )
         except Exception as e:
             cherrypy.log(f"Failed to initialize session management: {e}", severity=40)
-    
+
     def _init_api_security(self) -> None:
         """Initialize API security."""
         try:
@@ -110,19 +110,19 @@ class SpiderFootSecurityManager:
             self.api_key_manager = APIKeyManager(db_instance=None)  # Will need DB instance
         except Exception as e:
             cherrypy.log(f"Failed to initialize API security: {e}", severity=40)
-    
+
     def _init_security_headers(self) -> None:
         """Initialize security headers."""
         try:
             SecurityHeaders.setup_cherrypy_headers()
         except Exception as e:
             cherrypy.log(f"Failed to initialize security headers: {e}", severity=40)
-    
+
     def _init_request_validation(self) -> None:
         """Initialize request validation."""
         # Request validation is handled by CherryPy tools
         pass
-    
+
     def _init_error_handlers(self) -> None:
         """Initialize error handlers for CherryPy."""
         @cherrypy.tools.register('on_start_resource')
@@ -137,7 +137,7 @@ class SpiderFootSecurityManager:
                         ip_address=self._get_client_ip()
                     )
                 return self._json_error_response({'error': 'Bad request'}, 400)
-            
+
             def handle_401():
                 if self.security_logger:
                     self.security_logger.log_unauthorized_access(
@@ -146,7 +146,7 @@ class SpiderFootSecurityManager:
                         reason='Authentication required'
                     )
                 return self._json_error_response({'error': 'Unauthorized'}, 401)
-            
+
             def handle_403():
                 if self.security_logger:
                     self.security_logger.log_security_event(
@@ -157,7 +157,7 @@ class SpiderFootSecurityManager:
                         severity='WARNING'
                     )
                 return self._json_error_response({'error': 'Forbidden'}, 403)
-            
+
             def handle_429():
                 if self.security_logger:
                     self.security_logger.log_rate_limit_exceeded(
@@ -167,7 +167,7 @@ class SpiderFootSecurityManager:
                         ip_address=self._get_client_ip()
                     )
                 return self._json_error_response({'error': 'Rate limit exceeded'}, 429)
-            
+
             def handle_500():
                 if self.security_logger:
                     self.security_logger.log_security_event(
@@ -177,7 +177,7 @@ class SpiderFootSecurityManager:
                         ip_address=self._get_client_ip()
                     )
                 return self._json_error_response({'error': 'Internal server error'}, 500)
-            
+
             # Register error handlers
             cherrypy.config.update({
                 'error_page.400': handle_400,
@@ -186,7 +186,7 @@ class SpiderFootSecurityManager:
                 'error_page.429': handle_429,
                 'error_page.500': handle_500,
             })
-    
+
     def _setup_cherrypy_tools(self) -> None:
         """Setup CherryPy tools for security."""
         # Setup security validation tool
@@ -200,7 +200,7 @@ class SpiderFootSecurityManager:
             except Exception as e:
                 cherrypy.log(f"Security validation error: {e}", severity=40)
                 raise cherrypy.HTTPError(500, "Security validation failed")
-        
+
         # Setup security headers tool
         @cherrypy.tools.register('before_finalize', priority=60)
         def security_headers():
@@ -209,25 +209,25 @@ class SpiderFootSecurityManager:
                 SecurityHeaders.add_headers_to_cherrypy_response()
             except Exception as e:
                 cherrypy.log(f"Security headers error: {e}", severity=40)
-        
+
         # Enable tools by default
         cherrypy.config.update({
             'tools.security_validation.on': True,
             'tools.security_headers.on': True,
         })
-    
+
     def _validate_incoming_request(self) -> None:
         """Validate incoming request for security issues."""
         client_ip = self._get_client_ip()
-        
+
         # Check rate limits
         if not self._check_rate_limits():
             raise cherrypy.HTTPError(429, "Rate limit exceeded")
-        
+
         # Check if authentication is required
         if self._requires_authentication() and not self._validate_session():
             raise cherrypy.HTTPError(401, "Authentication required")
-        
+
         # Validate input data
         if cherrypy.request.method in ('POST', 'PUT', 'PATCH'):
             try:
@@ -238,11 +238,11 @@ class SpiderFootSecurityManager:
             except Exception as e:
                 cherrypy.log(f"Input validation error: {e}", severity=40)
                 raise cherrypy.HTTPError(400, "Request validation failed")
-        
+
         # Log request if needed
         if self._should_log_request():
             self._log_request()
-    
+
     def _get_client_ip(self) -> str:
         """Get client IP address."""
         # Check for forwarded headers first
@@ -252,22 +252,22 @@ class SpiderFootSecurityManager:
         if not ip:
             ip = getattr(cherrypy.request, 'remote', {}).get('ip', 'unknown')
         return ip
-    
+
     def _check_rate_limits(self) -> bool:
         """Check if request is within rate limits."""
         if not self.rate_limiter:
             return True
-        
+
         client_ip = self._get_client_ip()
         endpoint_type = self._get_endpoint_type()
-        
+
         try:
             allowed, info = self.rate_limiter.check_rate_limit(endpoint_type)
             return allowed
         except Exception as e:
             cherrypy.log(f"Rate limit check error: {e}", severity=40)
             return True  # Allow on error to avoid blocking legitimate requests
-    
+
     def _get_endpoint_type(self) -> str:
         """Determine endpoint type for rate limiting."""
         path = cherrypy.request.path_info
@@ -279,66 +279,66 @@ class SpiderFootSecurityManager:
             return 'scan'
         else:
             return 'web'
-    
+
     def _requires_authentication(self) -> bool:
         """Check if the current endpoint requires authentication."""
         path = cherrypy.request.path_info
-        
+
         # Public endpoints that don't require authentication
         public_endpoints = ['/login', '/static', '/css', '/js', '/images', '/favicon.ico']
-        
+
         for endpoint in public_endpoints:
             if path.startswith(endpoint):
                 return False
-        
+
         return self.app_config.get('authentication_required', False)
-    
+
     def _validate_session(self) -> bool:
         """Validate session."""
         if not self.session_manager:
             return True  # No session management configured
-        
+
         try:
             session_token = cherrypy.session.get('session_token')
             if not session_token:
                 return False
-            
+
             user_agent = cherrypy.request.headers.get('User-Agent', '')
             client_ip = self._get_client_ip()
-            
+
             session_data = self.session_manager.validate_session(
                 session_token, user_agent, client_ip
             )
-            
+
             return session_data is not None
         except Exception as e:
             cherrypy.log(f"Session validation error: {e}", severity=40)
             return False
-    
+
     def _should_log_request(self) -> bool:
         """Determine if request should be logged."""
         if not self.security_logger:
             return False
-        
+
         # Log all POST/PUT/DELETE requests
         if cherrypy.request.method in ('POST', 'PUT', 'DELETE'):
             return True
-        
+
         # Log API requests
         if cherrypy.request.path_info.startswith('/api/'):
             return True
-        
+
         # Log admin requests
         if cherrypy.request.path_info.startswith('/admin'):
             return True
-        
+
         return False
-    
+
     def _log_request(self) -> None:
         """Log request details."""
         if not self.security_logger:
             return
-        
+
         try:
             self.security_logger.log_security_event(
                 SecurityEventType.API_KEY_CREATED if cherrypy.request.path_info.startswith('/api/') else SecurityEventType.SCAN_CREATED,
@@ -353,7 +353,7 @@ class SpiderFootSecurityManager:
             )
         except Exception as e:
             cherrypy.log(f"Request logging error: {e}", severity=40)
-    
+
     def _json_error_response(self, error_data: dict, status_code: int) -> str:
         """Return JSON error response."""
         cherrypy.response.status = status_code
@@ -363,10 +363,10 @@ class SpiderFootSecurityManager:
 
 def create_secure_cherrypy_app(config=None) -> SpiderFootSecurityManager:
     """Create CherryPy app with security configuration.
-    
+
     Args:
         config: Configuration dictionary
-        
+
     Returns:
         SpiderFootSecurityManager instance with security enabled
     """
@@ -385,11 +385,11 @@ def create_secure_cherrypy_app(config=None) -> SpiderFootSecurityManager:
             'db': 0
         }
     }
-    
+
     # Override with provided config
     if config:
         default_config.update(config)
-    
+
     # Configure CherryPy security settings
     cherrypy.config.update({
         'tools.sessions.on': True,
@@ -398,10 +398,10 @@ def create_secure_cherrypy_app(config=None) -> SpiderFootSecurityManager:
         'tools.sessions.secure': default_config.get('session_cookie_secure', True),
         'tools.sessions.samesite': 'Strict',
     })
-    
+
     # Initialize security
     security_manager = SpiderFootSecurityManager(default_config)
-    
+
     return security_manager
 
 

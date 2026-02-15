@@ -538,17 +538,17 @@ class SpiderFootDb:
         return self._event.scanResultHistory(instanceId)
     def scanResultsUpdateFP(self, instanceId: str, resultHashes: list, fpFlag: int) -> bool:
         return self._event.scanResultsUpdateFP(instanceId, resultHashes, fpFlag)
-    
+
     # --- SCAN ELEMENT METHODS ---
     def scanElementSourcesDirect(self, instanceId: str, elementIdList: list) -> list:
         return self._event.scanElementSourcesDirect(instanceId, elementIdList)
-    
+
     def scanElementChildrenDirect(self, instanceId: str, elementIdList: list) -> list:
         return self._event.scanElementChildrenDirect(instanceId, elementIdList)
-    
+
     def scanElementSourcesAll(self, instanceId: str, childData: list) -> list:
         return self._event.scanElementSourcesAll(instanceId, childData)
-    
+
     def scanElementChildrenAll(self, instanceId: str, parentIds: list) -> list:
         return self._event.scanElementChildrenAll(instanceId, parentIds)
     # --- CORRELATION RESULTS ---
@@ -691,11 +691,11 @@ class SpiderFootDb:
     def get_sources(self, scan_id: str, event_hash: str) -> list:
         """
         Get source events for a given event hash.
-        
+
         Args:
             scan_id: The scan instance ID
             event_hash: The event hash to get sources for
-            
+
         Returns:
             list: List of source event dictionaries
         """
@@ -704,11 +704,11 @@ class SpiderFootDb:
     def get_entities(self, scan_id: str, event_hash: str) -> list:
         """
         Get entity events for a given event hash.
-        
+
         Args:
             scan_id: The scan instance ID
             event_hash: The event hash to get entities for
-            
+
         Returns:
             list: List of entity event dictionaries
         """
@@ -717,11 +717,11 @@ class SpiderFootDb:
     def get_children(self, scan_id: str, event_hash: str) -> list:
         """
         Get child events for a given event hash.
-        
+
         Args:
             scan_id: The scan instance ID
             event_hash: The event hash to get children for
-            
+
         Returns:
             list: List of child event dictionaries
         """
@@ -730,7 +730,7 @@ class SpiderFootDb:
         children_data = self.scanElementChildrenAll(scan_id, [event_hash])
         if not children_data:
             return []
-        
+
         # Convert to the expected format
         children = []
         for event in children_data:

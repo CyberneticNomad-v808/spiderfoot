@@ -22,11 +22,11 @@ class WorkspaceEndpoints:
         except Exception as e:
             self.log.warning(f"Could not generate CSRF token: {e}")
             csrf_token = "disabled"
-        
+
         templ = Template(filename='spiderfoot/templates/workspaces.tmpl', lookup=self.lookup)
         return templ.render(
-            pageid='WORKSPACES', 
-            docroot=self.docroot, 
+            pageid='WORKSPACES',
+            docroot=self.docroot,
             version=__version__,
             csrf_token=csrf_token
         )

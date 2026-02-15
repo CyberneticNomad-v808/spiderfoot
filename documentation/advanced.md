@@ -34,7 +34,7 @@ SpiderFoot includes enterprise-grade security features that should be properly c
 
 ### Security Configuration
 
-Configure security features in your SpiderFoot configuration:
+Configure security features in your Spider Foot configuration:
 
 ```python
 security_config = {

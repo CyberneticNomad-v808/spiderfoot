@@ -3,6 +3,16 @@
 SpiderFoot includes various test suites.
 
 
+## Test Database Setup
+
+For integration tests (or any test needing a real database), provision the test database on the `unified-postgres` container:
+
+```
+./test/setup_test_db.sh
+```
+
+This creates the `spiderfoot_test` database and `spiderfoot` user if they don't already exist. It's idempotent — safe to run multiple times. All tests use real database connections, so run this before running tests.
+
 ## Unit and Integration Tests
 
 Unit and integration tests require test dependencies to be installed:
