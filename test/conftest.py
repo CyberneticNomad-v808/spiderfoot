@@ -5,6 +5,7 @@ import time
 import pytest
 import logging
 import threading
+import subprocess
 from pathlib import Path
 from _pytest.runner import runtestprotocol
 
@@ -151,6 +152,14 @@ def default_options(request):
 
     # Only set default_options if running in a class context
     if hasattr(request, 'cls') and request.cls is not None:
+        # Build DSN from environment to ensure test vs prod credentials are respected
+        db_user = os.environ['SPIDERFOOT_DB_USER']
+        db_pass = os.environ['SPIDERFOOT_DB_PASSWORD']
+        db_host = os.environ['SPIDERFOOT_DB_HOST']
+        db_port = os.environ['SPIDERFOOT_DB_PORT']
+        db_name = os.environ['SPIDERFOOT_DB_NAME']
+        dsn = f"postgresql://{db_user}:{db_pass}@{db_host}:{db_port}/{db_name}"
+
         request.cls.default_options = {
             '_debug': False,
             '__logging': True,
@@ -161,8 +170,8 @@ def default_options(request):
             '_internettlds': 'https://publicsuffix.org/list/effective_tld_names.dat',
             '_internettlds_cache': 72,
             '_genericusers': ",".join(SpiderFootHelpers.usernamesFromWordlists(['generic-usernames'])),
-            # PostgreSQL-only: use DSN format
-            '__database': 'postgresql://spiderfoot@unified-postgres.blk.ing:5432/spiderfoot_test',
+            # PostgreSQL-only: use DSN format from env
+            '__database': dsn,
             '__dbtype': 'postgresql',
             '__modules__': None,
             '__correlationrules__': None,
@@ -193,6 +202,61 @@ def default_options(request):
     yield
 
 # Force cleanup of lingering resources
+
+
+@pytest.fixture(autouse=True, scope="session")
+def recreate_test_database(request):
+    """Drop and recreate the test database before running tests."""
+    # Only run in master process, not in xdist workers
+    if hasattr(request.config, 'workerinput'):
+        yield
+        return
+    
+    db_name = os.environ.get('SPIDERFOOT_DB_NAME', 'spiderfoot_test')
+    db_owner = os.environ.get('SPIDERFOOT_DB_USER', 'spiderfoot_test')
+    
+    try:
+        # Drop existing database
+        subprocess.run(
+            ['docker', 'exec', 'unified-postgres', 'psql', '-U', 'postgres', '-c', f'DROP DATABASE IF EXISTS {db_name};'],
+            check=True,
+            capture_output=True,
+            text=True
+        )
+        # Create fresh database with test user as owner
+        subprocess.run(
+            ['docker', 'exec', 'unified-postgres', 'psql', '-U', 'postgres', '-c', f'CREATE DATABASE {db_name} OWNER {db_owner};'],
+            check=True,
+            capture_output=True,
+            text=True
+        )
+        # Grant all privileges on database to test user
+        subprocess.run(
+            ['docker', 'exec', 'unified-postgres', 'psql', '-U', 'postgres', '-d', db_name, '-c', f'GRANT ALL PRIVILEGES ON DATABASE {db_name} TO {db_owner};'],
+            check=True,
+            capture_output=True,
+            text=True
+        )
+        # Change public schema owner to test user to ensure CREATE permissions
+        subprocess.run(
+            ['docker', 'exec', 'unified-postgres', 'psql', '-U', 'postgres', '-d', db_name, '-c', f'ALTER SCHEMA public OWNER TO {db_owner};'],
+            check=True,
+            capture_output=True,
+            text=True
+        )
+        # Grant explicit permissions on public schema
+        subprocess.run(
+            ['docker', 'exec', 'unified-postgres', 'psql', '-U', 'postgres', '-d', db_name, '-c', f'GRANT ALL PRIVILEGES ON SCHEMA public TO {db_owner};'],
+            check=True,
+            capture_output=True,
+            text=True
+        )
+        logging.info(f"Recreated test database: {db_name}")
+    except subprocess.CalledProcessError as e:
+        logging.error(f"Failed to recreate test database: {e.stderr}")
+        raise
+    
+    yield
 
 
 @pytest.fixture(autouse=True, scope="session")

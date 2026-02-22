@@ -479,10 +479,14 @@ class TestEnterpriseStorageFeatures(TestModuleBase):
         """Test coordination between multiple storage backends."""
         print("\n=== Testing Multi-Storage Coordination ===")
         
-        # Set up multiple storage modules
-        sqlite_module = sfp__stor_db()
-        sqlite_module.setup(self.sf, {'_store': True, 'db_type': 'sqlite'})
-        sqlite_module.getScanId = MagicMock(return_value=self.test_scan_id)
+        # COMMENTED OUT: SQLite support has been removed
+        # This test was using sqlite_module which is no longer supported
+        # Keeping only Elasticsearch and stdout coordination testing
+        
+        # Set up multiple storage modules (SQLite removed)
+        # sqlite_module = sfp__stor_db()
+        # sqlite_module.setup(self.sf, {'_store': True, 'db_type': 'sqlite'})
+        # sqlite_module.getScanId = MagicMock(return_value=self.test_scan_id)
         
         with patch('modules.sfp__stor_elasticsearch.Elasticsearch') as mock_es_class, \
              patch('elasticsearch.helpers.bulk') as mock_bulk:
@@ -512,20 +516,20 @@ class TestEnterpriseStorageFeatures(TestModuleBase):
                 event = self.create_test_event("COORDINATION_TEST", f"data_{i}")
                 test_events.append(event)
                 
-                # Store in all backends
-                sqlite_module.handleEvent(event)
+                # Store in remaining backends (SQLite removed)
+                # sqlite_module.handleEvent(event)
                 es_module.handleEvent(event)
                 with patch('sys.stdout'):
                     stdout_module.handleEvent(event)
             
-            # Verify all backends processed events
-            self.assertEqual(self.mock_dbh.scanEventStore.call_count, 10)
+            # Verify remaining backends processed events (SQLite count removed)
+            # self.assertEqual(self.mock_dbh.scanEventStore.call_count, 10)
             self.assertEqual(len(es_module.buffer), 0)  # All events flushed immediately with bulk_size=1
             # Force flush Elasticsearch buffer
             es_module._flush_buffer()
             self.assertGreaterEqual(mock_bulk.call_count, 1, "Elasticsearch bulk should be called after flush.")
         
-        print("✓ Multi-storage backend coordination")
+        print("✓ Multi-storage backend coordination (Elasticsearch + stdout)")
         print("✓ Consistent event processing")
         print("✓ Independent error handling")
 

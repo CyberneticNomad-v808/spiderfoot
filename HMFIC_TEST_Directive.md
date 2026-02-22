@@ -1,1 +1,0 @@
-review pylint-report.txt

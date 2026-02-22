@@ -1,11 +1,20 @@
 import pytest
+import os
 from spiderfoot import SpiderFootDb
 from spiderfoot.correlation.rule_executor import RuleExecutor
 import yaml
 
 @pytest.fixture
 def dbh():
-    config = {'__database': ':memory:'}
+    # Build DSN from environment variables
+    db_user = os.environ['SPIDERFOOT_DB_USER']
+    db_pass = os.environ['SPIDERFOOT_DB_PASSWORD']
+    db_host = os.environ['SPIDERFOOT_DB_HOST']
+    db_port = os.environ['SPIDERFOOT_DB_PORT']
+    db_name = os.environ['SPIDERFOOT_DB_NAME']
+    dsn = f"postgresql://{db_user}:{db_pass}@{db_host}:{db_port}/{db_name}"
+    
+    config = {'__database': dsn, '__dbtype': 'postgresql'}
     dbh = SpiderFootDb(config, init=True)
     scan_id = 'integration_scan'
     # Ensure table is dropped and created fresh
@@ -16,7 +25,7 @@ def dbh():
         )
     """)
     dbh.dbh.execute(
-        "INSERT INTO tbl_scan_results (scan_id, type, data) VALUES (?, ?, ?)",
+        "INSERT INTO tbl_scan_results (scan_id, type, data) VALUES (%s, %s, %s)",
         (scan_id, 'EMAILADDR', 'integration@example.com')
     )
     dbh.conn.commit()
@@ -163,7 +172,7 @@ def test_multiple_scans(dbh):
     # Add a second scan with a different event
     scan_id2 = 'integration_scan2'
     dbh.dbh.execute(
-        "INSERT INTO tbl_scan_results (scan_id, type, data) VALUES (?, ?, ?)",
+        "INSERT INTO tbl_scan_results (scan_id, type, data) VALUES (%s, %s, %s)",
         (scan_id2, 'EMAILADDR', 'integration2@example.com')
     )
     dbh.conn.commit()

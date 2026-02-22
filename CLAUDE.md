@@ -5,11 +5,42 @@
 - Use Glob() instead of ls
 - Use Read() instead of cat
 
+## Archive Management
+- **`.archive/` folder:** Used to store old documentation, analysis reports, and temporary files (>30 days old)
+- **RULE:** Do NOT remove files from `.archive/` without explicit permission from HMFIC
+- Files in `.archive/` are kept for historical reference and may be needed later
+
 ## TESTING IS NOT OPTIONAL##
 - Read teh README.md in ./test
 - Verify the results
 - Test your code before you tell me its good.
 - SONAR:  Analyze "blkc-spiderfoot": sqp_236b8a57da567ffebe5a866a51a5b6eae2e42b1b
+## API Keys Storage
+
+**Location:** 1Password DEV_VAULT
+**Items:**
+- Main item: "API Key" (contains 17 services)
+  - etherscan.io
+  - pulsedive
+  - ipinfo
+  - greynoise
+  - hunter
+  - abuseipdb
+  - alienvault_otx
+  - leakix
+  - shodan
+  - security trails
+  - virustotal
+  - urlscan
+  - botswot
+  - solscan
+  - botscout
+- Additional items:
+  - "Etherscan-MultiChain" (blockchain API keys)
+  - "Pulsedive" (separate item)
+
+**Access:** `op item get "API Key" --vault DEV_VAULT --format json`
+
 ## CRITICAL REMINDERS
 
 ### Authentication Failures

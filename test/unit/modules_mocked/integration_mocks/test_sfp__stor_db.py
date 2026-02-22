@@ -51,25 +51,29 @@ class TestModuleIntegration_stor_db(BaseTestModuleIntegration):
         """Enhanced tearDown with ThreadReaper cleanup."""
         # ThreadReaper infrastructure automatically cleans up
         super().tearDown()
-    def test_handleEvent(self):
-        module = self.setup_module(sfp__stor_db)
-
-        # Ensure errorState is not set due to setup issues
-        module.errorState = False
-        self.assertFalse(module.errorState, "Module errorState should be False after setup")
-
-        target_value = 'example target value'
-        target_type = 'IP_ADDRESS'
-        event_type = 'ROOT'
-        event_data = 'example data'
-        target, evt = self.create_event(
-            target_value, target_type, event_type, event_data)
-
-        module.setTarget(target)
-        # Patch _store_sqlite and _store_postgresql to verify call
-        with patch.object(module, '_store_sqlite') as mock_sqlite, \
-             patch.object(module, '_store_postgresql', create=True) as mock_pg:
-            module.handleEvent(evt)
-            # Should call _store_sqlite for sqlite config
-            mock_sqlite.assert_called_once_with(evt)
-            mock_pg.assert_not_called()
+    # COMMENTED OUT: SQLite support has been removed
+    # This test was testing SQLite fallback which is no longer relevant
+    # since the application only supports PostgreSQL now
+    # def test_handleEvent(self):
+    #     module = self.setup_module(sfp__stor_db)
+    #
+    #     # Ensure errorState is not set due to setup issues
+    #     module.errorState = False
+    #     self.assertFalse(module.errorState, "Module errorState should be False after setup")
+    #
+    #     target_value = 'example target value'
+    #     target_type = 'IP_ADDRESS'
+    #     event_type = 'ROOT'
+    #     event_data = 'example data'
+    #     target, evt = self.create_event(
+    #         target_value, target_type, event_type, event_data)
+    #
+    #     module.setTarget(target)
+    #     # Patch _store_sqlite and _store_postgresql to verify call
+    #     with patch.object(module, '_store_sqlite') as mock_sqlite, \
+    #          patch.object(module, '_store_postgresql', create=True) as mock_pg:
+    #         module.handleEvent(evt)
+    #         # Should call _store_sqlite for sqlite config
+    #         mock_sqlite.assert_called_once_with(evt)
+    #         mock_pg.assert_not_called()
+    pass  # Placeholder to keep class structure valid

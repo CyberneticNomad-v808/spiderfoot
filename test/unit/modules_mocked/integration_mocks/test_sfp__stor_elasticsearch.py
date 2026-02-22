@@ -43,8 +43,17 @@ class BaseTestModuleIntegration(TestModuleBase):
         super().tearDown()
     @property
     def default_options(self):
+        # Build DSN from environment variables
+        db_user = os.environ['SPIDERFOOT_DB_USER']
+        db_pass = os.environ['SPIDERFOOT_DB_PASSWORD']
+        db_host = os.environ['SPIDERFOOT_DB_HOST']
+        db_port = os.environ['SPIDERFOOT_DB_PORT']
+        db_name = os.environ['SPIDERFOOT_DB_NAME']
+        dsn = f"postgresql://{db_user}:{db_pass}@{db_host}:{db_port}/{db_name}"
+        
         return {
-            '__database': ':memory:',
+            '__database': dsn,
+            '__dbtype': 'postgresql',
             '__modules__': {},
             '_debug': False,
         }

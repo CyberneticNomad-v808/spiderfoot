@@ -17,9 +17,14 @@ class TestSpiderFootWebUiRoutes(helper.CPWebCase):
 
     @staticmethod
     def setup_server():
-        # Use a unique test DB for each run (safe method)
-        with tempfile.NamedTemporaryFile(suffix='.db', delete=False) as tf:
-            test_db = tf.name
+        # Build PostgreSQL DSN from environment variables
+        db_user = os.environ['SPIDERFOOT_DB_USER']
+        db_pass = os.environ['SPIDERFOOT_DB_PASSWORD']
+        db_host = os.environ['SPIDERFOOT_DB_HOST']
+        db_port = os.environ['SPIDERFOOT_DB_PORT']
+        db_name = os.environ['SPIDERFOOT_DB_NAME']
+        dsn = f"postgresql://{db_user}:{db_pass}@{db_host}:{db_port}/{db_name}"
+        
         default_config = {
             '_debug': False,
             '__logging': True,
@@ -31,8 +36,9 @@ class TestSpiderFootWebUiRoutes(helper.CPWebCase):
             '_internettlds': 'https://publicsuffix.org/list/effective_tld_names.dat',
             '_internettlds_cache': 72,
             '_genericusers': ",".join(SpiderFootHelpers.usernamesFromWordlists(['generic-usernames'])),
-            # note: test database file
-            '__database': test_db,
+            # PostgreSQL database connection
+            '__database': dsn,
+            '__dbtype': 'postgresql',
             # List of modules. Will be set after start-up.
             '__modules__': None,
             # List of correlation rules. Will be set after start-up.

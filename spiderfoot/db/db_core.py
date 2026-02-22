@@ -852,6 +852,15 @@ class DbCore:
         with self.dbhLock:
             for attempt in range(3):
                 try:
+                    # Serialize DDL across parallel workers to avoid pg_type duplicates
+                    # Use a fixed application-level advisory lock (two-arg variant avoids key collisions)
+                    try:
+                        self.dbh.execute("SELECT pg_advisory_lock(%s, %s)", (749123, 1))
+                        self.conn.commit()
+                    except Exception as e:
+                        # If advisory lock is unavailable on this backend, continue without it
+                        self._log_db_error("Advisory lock acquisition failed (continuing without lock)", e)
+                    
                     # Use backend-aware schema creation
                     from spiderfoot.db.__init__ import get_schema_queries
                     for qry in get_schema_queries(self.db_type):
@@ -884,6 +893,13 @@ class DbCore:
                         time.sleep(0.2 * (attempt + 1))
                         continue
                     raise IOError("SQL error encountered when setting up database") from e
+                finally:
+                    # Always release advisory lock if we acquired it
+                    try:
+                        self.dbh.execute("SELECT pg_advisory_unlock(%s, %s)", (749123, 1))
+                        self.conn.commit()
+                    except Exception:
+                        pass
 
     def close(self) -> None:
         """

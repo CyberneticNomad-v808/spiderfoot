@@ -54,7 +54,15 @@ class TestSFPRrocketreach(TestModuleBase):
 
     @classmethod
     def setUpClass(cls):
-        cls.sf = SpiderFoot({'__database': ':memory:', '__modules__': {}, '_debug': False})
+        # Build DSN from environment variables
+        db_user = os.environ['SPIDERFOOT_DB_USER']
+        db_pass = os.environ['SPIDERFOOT_DB_PASSWORD']
+        db_host = os.environ['SPIDERFOOT_DB_HOST']
+        db_port = os.environ['SPIDERFOOT_DB_PORT']
+        db_name = os.environ['SPIDERFOOT_DB_NAME']
+        dsn = f"postgresql://{db_user}:{db_pass}@{db_host}:{db_port}/{db_name}"
+        
+        cls.sf = SpiderFoot({'__database': dsn, '__dbtype': 'postgresql', '__modules__': {}, '_debug': False})
 
     def test_events(self):
         """Test the produced and watched event types."""

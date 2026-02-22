@@ -34,7 +34,15 @@ class TestSFPCiscoUmbrella(TestModuleBase):
 
     @classmethod
     def setUpClass(cls):
-        cls.sf = SpiderFoot({'__database': ':memory:', '__modules__': {}, '_debug': False})
+        # Build DSN from environment variables
+        db_user = os.environ['SPIDERFOOT_DB_USER']
+        db_pass = os.environ['SPIDERFOOT_DB_PASSWORD']
+        db_host = os.environ['SPIDERFOOT_DB_HOST']
+        db_port = os.environ['SPIDERFOOT_DB_PORT']
+        db_name = os.environ['SPIDERFOOT_DB_NAME']
+        dsn = f"postgresql://{db_user}:{db_pass}@{db_host}:{db_port}/{db_name}"
+        
+        cls.sf = SpiderFoot({'__database': dsn, '__dbtype': 'postgresql', '__modules__': {}, '_debug': False})
 
     def test_events(self):
         module = sfp_cisco_umbrella()
@@ -56,21 +64,19 @@ class TestSFPCiscoUmbrella(TestModuleBase):
         result = module.query('example.com')
         self.assertIsNone(result)
 
-    @patch('spiderfoot.sflib.SpiderFoot.fetchUrl')
-    def test_query_domain_not_found(self, mock_fetch):
+    def test_query_domain_not_found(self):
         module = sfp_cisco_umbrella()
-        module.sf = self.sf
-        module.opts['api_key'] = 'API_KEY'
-        mock_fetch.return_value = {'code': 200, 'content': '{"domain": "thisdomaindoesnotexist.com", "data": null}'}
+        module.setup(self.sf, {'api_key': 'API_KEY', '_fetchtimeout': 30})
+        # Mock fetchUrl on the sf instance
+        module.sf.fetchUrl = MagicMock(return_value={'code': 200, 'content': '{"domain": "thisdomaindoesnotexist.com", "data": null}'})
         result = module.query('thisdomaindoesnotexist.com')
         self.assertEqual(result, {'domain': 'thisdomaindoesnotexist.com', 'data': None})
 
-    @patch('spiderfoot.sflib.SpiderFoot.fetchUrl')
-    def test_query_domain_found(self, mock_fetch):
+    def test_query_domain_found(self):
         module = sfp_cisco_umbrella()
-        module.sf = self.sf
-        module.opts['api_key'] = 'API_KEY'
-        mock_fetch.return_value = {'code': 200, 'content': '{"domain": "google.com", "data": [{"categories": ["Search Engine"], "cohosted_sites": ["site1.com"], "geos": ["US"], "ips": ["8.8.8.8"], "registrar": "Registrar Inc.", "whois": "whois data"}] }'}
+        module.setup(self.sf, {'api_key': 'API_KEY', '_fetchtimeout': 30})
+        # Mock fetchUrl on the sf instance
+        module.sf.fetchUrl = MagicMock(return_value={'code': 200, 'content': '{"domain": "google.com", "data": [{"categories": ["Search Engine"], "cohosted_sites": ["site1.com"], "geos": ["US"], "ips": ["8.8.8.8"], "registrar": "Registrar Inc.", "whois": "whois data"}] }'})
         result = module.query('google.com')
         self.assertIsInstance(result, dict)
         self.assertEqual(result.get('domain'), 'google.com')
@@ -116,14 +122,14 @@ class TestSFPCiscoUmbrella(TestModuleBase):
         self.assertIn("RAW_RIR_DATA", calls)
         self.assertEqual(len(calls), 1)
 
-    @patch('spiderfoot.sflib.SpiderFoot.fetchUrl')
-    def test_handleEvent_domain_found(self, mock_fetch):
+    def test_handleEvent_domain_found(self):
         module = sfp_cisco_umbrella()
         module.__name__ = "sfp_cisco_umbrella"
         module.setup(self.sf, {'api_key': 'API_KEY', '_fetchtimeout': 30})
         evt = SpiderFootEvent("DOMAIN_NAME", "google.com",
                               self.__class__.__name__, None)
-        mock_fetch.return_value = {'code': 200, 'content': '{"domain": "google.com", "data": [{"categories": ["Search Engine"], "cohosted_sites": ["site1.com"], "geos": ["US"], "ips": ["8.8.8.8"], "registrar": "Registrar Inc.", "whois": "whois data"}] }'}
+        # Mock fetchUrl on the sf instance
+        module.sf.fetchUrl = MagicMock(return_value={'code': 200, 'content': '{"domain": "google.com", "data": [{"categories": ["Search Engine"], "cohosted_sites": ["site1.com"], "geos": ["US"], "ips": ["8.8.8.8"], "registrar": "Registrar Inc.", "whois": "whois data"}] }'})
         # Patch notifyListeners to avoid side effects
         module.notifyListeners = MagicMock()
         # Set the target to avoid TypeError
