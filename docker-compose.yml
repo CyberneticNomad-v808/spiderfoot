@@ -1,0 +1,101 @@
+#
+# number-two-scope (SpiderFoot) — self-contained stack for live testing
+#
+# Bundles its own PostgreSQL and Redis so this stack has no dependency on
+# shared infrastructure (unified-postgres, unified-redis, blking_private_network).
+# This is deliberate for now: integrate with shared infra only after this is
+# production-ready. See CLAUDE.md.
+#
+# Deploy: point Portainer at this file. It pulls the pre-built image from
+# GHCR (ghcr.io/cyberneticnomad-v808/number-two-scope) rather than building
+# in-place. Fill in real secrets via Portainer's own "Environment variables"
+# UI, using .env.example as the list of names to set — never commit real
+# values into this repo.
+#
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: number-two-scope-postgres
+    restart: unless-stopped
+    security_opt:
+      - label:disable
+    environment:
+      - POSTGRES_DB=${SPIDERFOOT_DB:-spiderfoot}
+      - POSTGRES_USER=${SPIDERFOOT_DB_USER:-spiderfoot}
+      - POSTGRES_PASSWORD=${SPIDERFOOT_DB_PASSWORD}
+    volumes:
+      - number_two_scope_postgres_data:/var/lib/postgresql/data
+    networks:
+      - number_two_scope_internal
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${SPIDERFOOT_DB_USER:-spiderfoot} -d ${SPIDERFOOT_DB:-spiderfoot}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: number-two-scope-redis
+    restart: unless-stopped
+    security_opt:
+      - label:disable
+    volumes:
+      - number_two_scope_redis_data:/data
+    networks:
+      - number_two_scope_internal
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  number-two-scope:
+    image: ghcr.io/cyberneticnomad-v808/number-two-scope:latest
+    container_name: number-two-scope
+    restart: unless-stopped
+    init: true
+    security_opt:
+      - label:disable
+    # Module API keys (SF__<MODULE>__<OPTION>=...) are set through Portainer's
+    # own "Environment variables" UI, not a committed file — see .env.example
+    # for the naming convention. Add each key you need under `environment:`
+    # here, or as ${VAR}-style references, once you configure it in Portainer.
+    environment:
+      - SPIDERFOOT_DB_TYPE=postgresql
+      - SPIDERFOOT_DB_HOST=postgres
+      - SPIDERFOOT_DB_PORT=5432
+      - SPIDERFOOT_DB_NAME=${SPIDERFOOT_DB:-spiderfoot}
+      - SPIDERFOOT_DB_USER=${SPIDERFOOT_DB_USER:-spiderfoot}
+      - SPIDERFOOT_DB_PASSWORD=${SPIDERFOOT_DB_PASSWORD}
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+    volumes:
+      - number_two_scope_logs:/home/spiderfoot/logs
+      - number_two_scope_dotlogs:/home/spiderfoot/.spiderfoot/logs
+      - number_two_scope_cache:/home/spiderfoot/cache
+      - number_two_scope_config:/home/spiderfoot/config
+      - number_two_scope_data:/home/spiderfoot/data
+    ports:
+      - "5001:5001"
+      - "8001:8001"
+    networks:
+      - number_two_scope_internal
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+networks:
+  number_two_scope_internal:
+    driver: bridge
+
+volumes:
+  number_two_scope_postgres_data:
+  number_two_scope_redis_data:
+  number_two_scope_logs:
+  number_two_scope_dotlogs:
+  number_two_scope_cache:
+  number_two_scope_config:
+  number_two_scope_data:
