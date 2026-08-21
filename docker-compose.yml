@@ -65,7 +65,12 @@ services:
       - SPIDERFOOT_DB_TYPE=postgresql
       - SPIDERFOOT_DB_HOST=postgres
       - SPIDERFOOT_DB_PORT=5432
+      # Both names are required: SPIDERFOOT_DB_NAME is read by sfp__stor_db.py
+      # and db_core.py; SPIDERFOOT_DB (legacy name) is read directly by
+      # spiderfoot/webui/routes.py, which defaults to 'spiderfoot_db' if unset
+      # -- a mismatch against this Postgres's actual database name otherwise.
       - SPIDERFOOT_DB_NAME=${SPIDERFOOT_DB:-spiderfoot}
+      - SPIDERFOOT_DB=${SPIDERFOOT_DB:-spiderfoot}
       - SPIDERFOOT_DB_USER=${SPIDERFOOT_DB_USER:-spiderfoot}
       - SPIDERFOOT_DB_PASSWORD=${SPIDERFOOT_DB_PASSWORD}
       - REDIS_HOST=redis
