@@ -96,7 +96,8 @@ class WebUiRoutes(SettingsEndpoints, ScanEndpoints, ExportEndpoints, WorkspaceEn
         if db_type == 'postgresql':
             db_host = os.getenv('SPIDERFOOT_DB_HOST')
             db_port = os.getenv('SPIDERFOOT_DB_PORT', '5432')
-            db_name = os.getenv('SPIDERFOOT_DB', 'spiderfoot_db')
+            # Support both SPIDERFOOT_DB_NAME (preferred) and SPIDERFOOT_DB (legacy alias)
+            db_name = os.getenv('SPIDERFOOT_DB_NAME') or os.getenv('SPIDERFOOT_DB', 'spiderfoot_db')
             db_user = os.getenv('SPIDERFOOT_DB_USER', 'postgres')
             db_pass = os.getenv('SPIDERFOOT_DB_PASSWORD')
 
