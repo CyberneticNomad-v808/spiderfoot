@@ -2,9 +2,15 @@
 # number-two-scope (SpiderFoot) — self-contained stack for live testing
 #
 # Bundles its own PostgreSQL and Redis so this stack has no dependency on
-# shared infrastructure (unified-postgres, unified-redis, blking_private_network).
-# This is deliberate for now: integrate with shared infra only after this is
+# shared *data* infrastructure (unified-postgres, unified-redis). That's
+# deliberate for now: integrate with those only after this is
 # production-ready. See CLAUDE.md.
+#
+# It DOES join blking_private_network and route through the shared
+# internal-proxy (Traefik) — even dev work should go through the internal
+# proxy rather than raw host ports, so there's no ports: mapping here.
+# Reachable at https://number-two-scope.blk.ing (web UI) and
+# https://number-two-scope-api.blk.ing (API).
 #
 # Deploy: point Portainer at this file. It pulls the pre-built image from
 # GHCR (ghcr.io/cyberneticnomad-v808/number-two-scope) rather than building
@@ -81,20 +87,32 @@ services:
       - number_two_scope_cache:/home/spiderfoot/cache
       - number_two_scope_config:/home/spiderfoot/config
       - number_two_scope_data:/home/spiderfoot/data
-    ports:
-      - "5001:5001"
-      - "8001:8001"
     networks:
       - number_two_scope_internal
+      - blking_private_network
     depends_on:
       postgres:
         condition: service_healthy
       redis:
         condition: service_healthy
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.number-two-scope.rule=Host(`number-two-scope.blk.ing`)"
+      - "traefik.http.routers.number-two-scope.entrypoints=websecure"
+      - "traefik.http.routers.number-two-scope.tls=true"
+      - "traefik.http.routers.number-two-scope.service=number-two-scope"
+      - "traefik.http.services.number-two-scope.loadbalancer.server.port=5001"
+      - "traefik.http.routers.number-two-scope-api.rule=Host(`number-two-scope-api.blk.ing`)"
+      - "traefik.http.routers.number-two-scope-api.entrypoints=websecure"
+      - "traefik.http.routers.number-two-scope-api.tls=true"
+      - "traefik.http.routers.number-two-scope-api.service=number-two-scope-api"
+      - "traefik.http.services.number-two-scope-api.loadbalancer.server.port=8001"
 
 networks:
   number_two_scope_internal:
     driver: bridge
+  blking_private_network:
+    external: true
 
 volumes:
   number_two_scope_postgres_data:
