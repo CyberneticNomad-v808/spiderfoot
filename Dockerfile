@@ -91,10 +91,10 @@ COPY --from=builder /opt/venv /opt/venv
 # Copy tools from builder
 COPY --from=builder /tools /tools
 
-# Create user and directories
-RUN addgroup --system spiderfoot && \
-    adduser --system --ingroup spiderfoot --home /home/spiderfoot \
-            --shell /usr/sbin/nologin --gecos "SpiderFoot User" spiderfoot && \
+# Create user and directories with explicit UID/GID 1000 to match compose user: "1000:1000"
+RUN addgroup --gid 1000 spiderfoot && \
+    adduser --uid 1000 --gid 1000 --home /home/spiderfoot \
+            --shell /usr/sbin/nologin --gecos "SpiderFoot User" --no-create-home --disabled-password spiderfoot && \
     mkdir -p /home/spiderfoot/data /home/spiderfoot/logs /home/spiderfoot/cache /home/spiderfoot/.spiderfoot/logs && \
     # Do NOT chown bind-mounted folders here; this causes errors if the host directory is mounted at runtime.
     # Only set ownership for files inside the image.

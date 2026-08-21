@@ -530,6 +530,8 @@ class SpiderFootDb:
     # --- SCAN RESULT / EVENT FUNCTIONS ---
     def scanResultEvent(self, instanceId: str, eventType: str = 'ALL', srcModule: str = None, data: list = None, sourceId: list = None, correlationId: str = None, filterFp: bool = False) -> list:
         return self._event.scanResultEvent(instanceId, eventType, srcModule, data, sourceId, correlationId, filterFp)
+    def scanResultEventForGraph(self, instanceId: str, filterFp: bool = False) -> list:
+        return self._event.scanResultEventForGraph(instanceId, filterFp)
     def scanResultEventUnique(self, instanceId: str, eventType: str = 'ALL', filterFp: bool = False) -> list:
         return self._event.scanResultEventUnique(instanceId, eventType, filterFp)
     def scanResultSummary(self, instanceId: str, by: str = "type") -> list:
