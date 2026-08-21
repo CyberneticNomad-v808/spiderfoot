@@ -136,11 +136,11 @@ class EventManager:
             raise TypeError(f"instanceId is {type(instanceId)}; expected str()")
         ph = get_placeholder(self.db_type)
         qry = (
-            f"SELECT generated AS generated, component, type, message, rowid "
+            f"SELECT generated AS generated, component, type, message, id AS rowid "
             f"FROM tbl_scan_log WHERE scan_instance_id = {ph}"
         )
         if fromRowId:
-            qry += f" and rowid > {ph}"
+            qry += f" and id > {ph}"
         qry += " ORDER BY generated "
         if reverse:
             qry += "ASC"
