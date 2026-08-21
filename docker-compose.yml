@@ -24,6 +24,11 @@ services:
     image: postgres:16-alpine
     container_name: number-two-scope-postgres
     restart: unless-stopped
+    # SpiderFoot opens one DB connection per module thread; an "All modules"
+    # scan (270+ modules) exhausts Postgres's default max_connections=100
+    # almost immediately, breaking the webui (scanlog, scanlist, etc.) for
+    # the whole scan's duration. Raise it well above realistic module counts.
+    command: ["-c", "max_connections=300"]
     security_opt:
       - label:disable
     environment:
