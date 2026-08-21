@@ -639,6 +639,11 @@ class SpiderFootHelpers():
 
             ret: typing.List[str] = list()
 
+            if item not in parents:
+                # 'ROOT' (or any other terminal sentinel with no event of
+                # its own) has no further ancestry to walk up.
+                return ret
+
             for [parent, entity_id] in parents[item]:
                 if entity_id in pids:
                     continue
