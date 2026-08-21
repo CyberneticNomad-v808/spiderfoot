@@ -1206,7 +1206,7 @@ class WebUiRoutes(SettingsEndpoints, ScanEndpoints, ExportEndpoints, WorkspaceEn
             if not sid:
                 return json.dumps({"nodes": [], "edges": [], "error": "No scan ID provided"})
             dbh = self._get_dbh()
-            data = dbh.scanResultEvent(sid)
+            data = dbh.scanResultEventForGraph(sid)
             scan = dbh.scanInstanceGet(sid)
 
             if not scan:
@@ -1238,7 +1238,7 @@ class WebUiRoutes(SettingsEndpoints, ScanEndpoints, ExportEndpoints, WorkspaceEn
                 if scan:
                     if not root_target:
                         root_target = scan[1]
-                    data = dbh.scanResultEvent(scan_id)
+                    data = dbh.scanResultEventForGraph(scan_id)
                     all_data.extend(data)
 
             if not all_data:

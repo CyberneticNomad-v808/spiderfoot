@@ -864,7 +864,7 @@ class ScanEndpoints:
         dbh = SpiderFootDb(self.config)
         if not id:
             return self.error("No scan id provided.")
-        data = dbh.scanResultEvent(id, filterFp=True)
+        data = dbh.scanResultEventForGraph(id, filterFp=True)
         scan = dbh.scanInstanceGet(id)
         if not scan:
             return self.error("Scan not found.")
@@ -893,7 +893,7 @@ class ScanEndpoints:
         if not ids:
             return self.error("No scan ids provided.")
         for scan_id in ids.split(','):
-            d = dbh.scanResultEvent(scan_id, filterFp=True)
+            d = dbh.scanResultEventForGraph(scan_id, filterFp=True)
             scan = dbh.scanInstanceGet(scan_id)
             if d:
                 data.extend(d)
