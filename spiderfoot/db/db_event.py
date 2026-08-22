@@ -503,12 +503,18 @@ class EventManager:
                 f"sfEvent.risk value is {type(sfEvent.risk)}; "
                 f"expected 0 - 100"
             )
-        if (not isinstance(sfEvent.sourceEvent, SpiderFootEvent) and
-                sfEvent.eventType != "ROOT"):
-            raise TypeError(
-                f"sfEvent.sourceEvent is {type(sfEvent.sourceEvent)}; "
-                f"expected str()"
-            )
+        # Note: no separate check on sfEvent.sourceEvent itself here (there
+        # used to be one requiring it to be a real SpiderFootEvent for any
+        # non-ROOT eventType). SpiderFootEvent's own sourceEvent setter
+        # explicitly documents and supports sourceEvent=None for "testing
+        # or special cases", defaulting sourceEventHash to "ROOT" -- a
+        # legitimate, storable value used by e.g. sfp_advanced_correlation's
+        # scanFinished()-emitted aggregate events, which have no single
+        # parent event. That check rejected exactly this case with a
+        # TypeError whose own message didn't even match what it was
+        # checking ("expected str()" while testing isinstance(...,
+        # SpiderFootEvent)). What actually needs validating -- and gets
+        # stored -- is sourceEventHash, checked just below.
         if not isinstance(sfEvent.sourceEventHash, str):
             raise TypeError(
                 f"sfEvent.sourceEventHash is {type(sfEvent.sourceEventHash)}; "
