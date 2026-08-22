@@ -92,6 +92,34 @@ services:
       - SPIDERFOOT_DB_PASSWORD=${SPIDERFOOT_DB_PASSWORD}
       - REDIS_HOST=redis
       - REDIS_PORT=6379
+      # These had drifted: they were only ever in the ad-hoc StackUpdate
+      # payload used to redeploy this stack, never actually committed
+      # here despite this file's own header saying it's the source of
+      # truth for deploys. Brought back in sync with what's actually
+      # live -- see this project's own CLAUDE.md hard rule about env var
+      # names and stack references needing to move together.
+      - SF__SFP_ABUSEIPDB__API_KEY=${SF__SFP_ABUSEIPDB__API_KEY}
+      - SF__SFP_ALIENVAULT__API_KEY=${SF__SFP_ALIENVAULT__API_KEY}
+      - SF__SFP_ARBITRUM__API_KEY=${SF__SFP_ARBITRUM__API_KEY}
+      - SF__SFP_BNB__API_KEY=${SF__SFP_BNB__API_KEY}
+      - SF__SFP_BOTSWOT__API_KEY=${SF__SFP_BOTSWOT__API_KEY}
+      - SF__SFP_CENSYS__CENSYS_API_KEY_SECRET=${SF__SFP_CENSYS__CENSYS_API_KEY_SECRET}
+      - SF__SFP_ETHEREUM__API_KEY=${SF__SFP_ETHEREUM__API_KEY}
+      - SF__SFP_ETHERSCAN__API_KEY=${SF__SFP_ETHERSCAN__API_KEY}
+      - SF__SFP_FULLHUNT__API_KEY=${SF__SFP_FULLHUNT__API_KEY}
+      - SF__SFP_GREYNOISE_COMMUNITY__API_KEY=${SF__SFP_GREYNOISE_COMMUNITY__API_KEY}
+      - SF__SFP_GREYNOISE__API_KEY=${SF__SFP_GREYNOISE__API_KEY}
+      - SF__SFP_HUNTER__API_KEY=${SF__SFP_HUNTER__API_KEY}
+      - SF__SFP_HYBRID_ANALYSIS__API_KEY=${SF__SFP_HYBRID_ANALYSIS__API_KEY}
+      - SF__SFP_IPINFO__API_KEY=${SF__SFP_IPINFO__API_KEY}
+      - SF__SFP_LEAKIX__API_KEY=${SF__SFP_LEAKIX__API_KEY}
+      - SF__SFP_PROJECTDISCOVERY__API_KEY=${SF__SFP_PROJECTDISCOVERY__API_KEY}
+      - SF__SFP_PULSEDIVE__API_KEY=${SF__SFP_PULSEDIVE__API_KEY}
+      - SF__SFP_SECURITYTRAILS__API_KEY=${SF__SFP_SECURITYTRAILS__API_KEY}
+      - SF__SFP_SHODAN__API_KEY=${SF__SFP_SHODAN__API_KEY}
+      - SF__SFP_SOLSCAN__API_KEY=${SF__SFP_SOLSCAN__API_KEY}
+      - SF__SFP_URLSCAN__API_KEY=${SF__SFP_URLSCAN__API_KEY}
+      - SF__SFP_VIRUSTOTAL__API_KEY=${SF__SFP_VIRUSTOTAL__API_KEY}
     volumes:
       - number_two_scope_logs:/home/spiderfoot/logs
       - number_two_scope_dotlogs:/home/spiderfoot/.spiderfoot/logs
@@ -101,6 +129,7 @@ services:
     networks:
       - number_two_scope_internal
       - blking_private_network
+      - tor_proxy_network
     depends_on:
       postgres:
         condition: service_healthy
@@ -123,6 +152,23 @@ networks:
   number_two_scope_internal:
     driver: bridge
   blking_private_network:
+    external: true
+  # Joins the "onion" Tor SOCKS/DNS proxy container so onion-search
+  # modules (sfp_torch, sfp_ahmia, sfp_onioncity, sfp_onionsearchengine)
+  # can actually reach it -- confirmed live: onion exposes SOCKSPort 9150
+  # and DNSPort 8853 on this network, hostname "onion".
+  #
+  # This alone does NOT route any scan traffic through Tor -- SpiderFoot's
+  # SOCKS proxy setting (_socks1type/_socks2addr/_socks3port, set via
+  # Settings, not this file) is scan-wide, not per-module: enabling it
+  # routes *every* module's traffic through Tor for that scan, not just
+  # the onion-specific ones (confirmed in scan_service/scanner.py --
+  # it sets one shared proxy on the SpiderFoot helper object every
+  # module's fetchUrl() call uses). So joining this network just makes
+  # onion reachable when you deliberately turn Tor proxying on for a
+  # scan; it's not on by default, and there's no way in this codebase to
+  # scope Tor to just the onion modules.
+  tor_proxy_network:
     external: true
 
 volumes:
