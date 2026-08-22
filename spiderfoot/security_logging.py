@@ -232,15 +232,26 @@ class ErrorHandler:
         self.security_logger = security_logger or SecurityLogger()
         self.error_logger = logging.getLogger('spiderfoot.errors')
 
-        # Set up error logger
+        # Set up error logger. Same reasoning as SecurityLogger above: this
+        # runs at import time via the module-level ErrorHandler(...)
+        # singleton near the bottom of this file, so an unhandled failure
+        # here is just as fatal to the whole app's startup.
         if not self.error_logger.handlers:
-            handler = logging.FileHandler('logs/errors.log', encoding='utf-8')
-            formatter = logging.Formatter(
-                '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-            )
-            handler.setFormatter(formatter)
-            self.error_logger.addHandler(handler)
-            self.error_logger.setLevel(logging.ERROR)
+            try:
+                handler = logging.FileHandler('logs/errors.log', encoding='utf-8')
+                formatter = logging.Formatter(
+                    '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+                )
+                handler.setFormatter(formatter)
+                self.error_logger.addHandler(handler)
+                self.error_logger.setLevel(logging.ERROR)
+            except OSError as e:
+                sys.stderr.write(
+                    f"security_logging: could not open logs/errors.log for "
+                    f"writing ({e}); continuing without a file handler for "
+                    f"the error logger.\n"
+                )
+                self.error_logger.setLevel(logging.ERROR)
 
     def handle_exception(self, e: Exception, context: Dict[str, Any] = None,
                         user_id: str = None, ip_address: str = None,
