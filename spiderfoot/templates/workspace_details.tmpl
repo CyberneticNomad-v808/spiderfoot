@@ -1708,11 +1708,16 @@ function loadAvailableModules() {
         if (data && Array.isArray(data)) {
             allModules = data;
             
-            // Group modules by category
+            // Group modules by category. module.cats is the real
+            // 'categories' field (e.g. "DNS", "Search Engines") --
+            // module.group is useCases ("Footprint"/"Investigate"/
+            // "Passive"), a different vocabulary that was mistakenly
+            // used here, making these headers show useCases mislabeled
+            // as categories.
             modulesByCategory = {};
             data.forEach(function(module) {
-                if (module.group && Array.isArray(module.group) && module.group.length > 0) {
-                    var category = module.group[0];
+                if (module.cats && Array.isArray(module.cats) && module.cats.length > 0) {
+                    var category = module.cats[0];
                     if (!modulesByCategory[category]) {
                         modulesByCategory[category] = [];
                     }
@@ -1736,14 +1741,15 @@ function displayModules(filteredModules) {
     var modulesToShow = filteredModules || allModules;
     var html = '';
     
-    // Group filtered modules by category
+    // Group filtered modules by category (module.cats, not module.group --
+    // see loadAvailableModules() above for why).
     var displayCategories = {};
     modulesToShow.forEach(function(module) {
         var category = 'Other';
-        if (module.group && Array.isArray(module.group) && module.group.length > 0) {
-            category = module.group[0];
+        if (module.cats && Array.isArray(module.cats) && module.cats.length > 0) {
+            category = module.cats[0];
         }
-        
+
         if (!displayCategories[category]) {
             displayCategories[category] = [];
         }
@@ -1776,13 +1782,14 @@ function displayPeriodicModules(modules) {
     var html = '';
     var modulesByCategory = {};
     
-    // Group modules by category
+    // Group modules by category (module.cats, not module.group -- see
+    // loadAvailableModules() above for why).
     modules.forEach(function(module) {
         var category = 'Other';
-        if (module.group && Array.isArray(module.group) && module.group.length > 0) {
-            category = module.group[0];
+        if (module.cats && Array.isArray(module.cats) && module.cats.length > 0) {
+            category = module.cats[0];
         }
-        
+
         if (!modulesByCategory[category]) {
             modulesByCategory[category] = [];
         }
