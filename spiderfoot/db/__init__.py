@@ -254,6 +254,7 @@ class SpiderFootDb:
         ['RAW_FILE_META_DATA', 'Raw File Meta Data', 1, 'DATA'],
         ['SEARCH_ENGINE_WEB_CONTENT', 'Search Engine Web Content', 1, 'DATA'],
         ['SOCIAL_MEDIA', 'Social Media Presence', 0, 'ENTITY'],
+        ['SOCIAL_MEDIA_PROFILE', 'Social Media Profile', 0, 'ENTITY'],
         ['SIMILAR_ACCOUNT_EXTERNAL', 'Similar Account on External Site', 0, 'ENTITY'],
         ['SIMILARDOMAIN', 'Similar Domain', 0, 'ENTITY'],
         ['SIMILARDOMAIN_WHOIS', 'Similar Domain - Whois', 1, 'DATA'],
@@ -530,6 +531,8 @@ class SpiderFootDb:
     # --- SCAN RESULT / EVENT FUNCTIONS ---
     def scanResultEvent(self, instanceId: str, eventType: str = 'ALL', srcModule: str = None, data: list = None, sourceId: list = None, correlationId: str = None, filterFp: bool = False) -> list:
         return self._event.scanResultEvent(instanceId, eventType, srcModule, data, sourceId, correlationId, filterFp)
+    def scanResultEventForGraph(self, instanceId: str, filterFp: bool = False) -> list:
+        return self._event.scanResultEventForGraph(instanceId, filterFp)
     def scanResultEventUnique(self, instanceId: str, eventType: str = 'ALL', filterFp: bool = False) -> list:
         return self._event.scanResultEventUnique(instanceId, eventType, filterFp)
     def scanResultSummary(self, instanceId: str, by: str = "type") -> list:
