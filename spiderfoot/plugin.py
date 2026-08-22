@@ -602,8 +602,17 @@ class SpiderFootPlugin:
             self.sf._dbh = self.__sfdb__
 
             if not (self.incomingEventQueue and self.outgoingEventQueue):
-                self.sf.error(
-                    "Please set up queues before starting module as thread")
+                # start() already verified both queues were set before
+                # spawning this thread, so reaching here with them unset
+                # means something cleared them in the window between
+                # thread.start() and this thread actually being scheduled
+                # -- in practice, threadsFinished() nulling incomingEventQueue
+                # for a module the orchestrator already marked errorState.
+                # That's a benign race on an already-failed module, not a
+                # fresh problem, so don't log it as a new error.
+                if not getattr(self, 'errorState', False):
+                    self.sf.error(
+                        "Please set up queues before starting module as thread")
                 return
 
             while not self.checkForStop():

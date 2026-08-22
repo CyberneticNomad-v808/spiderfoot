@@ -96,7 +96,8 @@ class WebUiRoutes(SettingsEndpoints, ScanEndpoints, ExportEndpoints, WorkspaceEn
         if db_type == 'postgresql':
             db_host = os.getenv('SPIDERFOOT_DB_HOST')
             db_port = os.getenv('SPIDERFOOT_DB_PORT', '5432')
-            db_name = os.getenv('SPIDERFOOT_DB', 'spiderfoot_db')
+            # Support both SPIDERFOOT_DB_NAME (preferred) and SPIDERFOOT_DB (legacy alias)
+            db_name = os.getenv('SPIDERFOOT_DB_NAME') or os.getenv('SPIDERFOOT_DB', 'spiderfoot_db')
             db_user = os.getenv('SPIDERFOOT_DB_USER', 'postgres')
             db_pass = os.getenv('SPIDERFOOT_DB_PASSWORD')
 
@@ -890,14 +891,16 @@ class WebUiRoutes(SettingsEndpoints, ScanEndpoints, ExportEndpoints, WorkspaceEn
         except Exception:
             return retdata
 
+        # See webui/helpers.py's searchBase() for the full explanation of
+        # this row shape (restored from db.py.backup's original 15-column
+        # search() query) and why the previous indices crashed.
         for row in data:
             lastseen = time.strftime(
                 "%Y-%m-%d %H:%M:%S", time.localtime(row[0]))
             escapeddata = html.escape(row[1])
             escapedsrc = html.escape(row[2])
             retdata.append([lastseen, escapeddata, escapedsrc,
-                            row[3], row[5], row[6], row[7], row[8], row[10],
-                            row[11], row[4], row[13], row[14]])
+                            row[3], row[9], row[5], row[6], row[7], row[4]])
 
         return retdata
 
@@ -1205,7 +1208,7 @@ class WebUiRoutes(SettingsEndpoints, ScanEndpoints, ExportEndpoints, WorkspaceEn
             if not sid:
                 return json.dumps({"nodes": [], "edges": [], "error": "No scan ID provided"})
             dbh = self._get_dbh()
-            data = dbh.scanResultEvent(sid)
+            data = dbh.scanResultEventForGraph(sid)
             scan = dbh.scanInstanceGet(sid)
 
             if not scan:
@@ -1237,7 +1240,7 @@ class WebUiRoutes(SettingsEndpoints, ScanEndpoints, ExportEndpoints, WorkspaceEn
                 if scan:
                     if not root_target:
                         root_target = scan[1]
-                    data = dbh.scanResultEvent(scan_id)
+                    data = dbh.scanResultEventForGraph(scan_id)
                     all_data.extend(data)
 
             if not all_data:
