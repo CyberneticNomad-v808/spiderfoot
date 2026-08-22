@@ -1271,29 +1271,55 @@ class WebUiRoutes(SettingsEndpoints, ScanEndpoints, ExportEndpoints, WorkspaceEn
                 except ValueError:
                     limit = 100
 
+            # Three bugs stacked here, all silently returning an empty
+            # results list regardless of actual data:
+            # 1. SFWorkspace(self.config) with no workspace_id ignored the
+            #    requested workspace entirely -- __init__ only loads an
+            #    existing workspace's data (self.scans etc.) when
+            #    workspace_id is passed; otherwise it silently creates a
+            #    brand-new, empty one.
+            # 2. get_workspace_summary() returns a summary dict with keys
+            #    like 'workspace_info'/'statistics'/'targets_by_type' --
+            #    there is no top-level 'scans' key in it at all. Using
+            #    getattr(that_dict, 'scans', []) can never find it either
+            #    way: dicts don't expose their keys as attributes, so this
+            #    always fell through to the [] default regardless of
+            #    workspace content. The actual scan list lives on the
+            #    workspace object's own .scans attribute.
+            # 3. Even with scans resolved, scanResultSummary() returns rows
+            #    grouped by event type (type, event_descr, last_in, total,
+            #    utotal) -- aggregate counts, not the individual
+            #    timestamp/event_type/event_data/source_module rows the
+            #    frontend (workspace_details.tmpl's loadResults()) expects
+            #    per result.
             from sfwebui import SpiderFootWorkspace as SFWorkspace
-            workspace = SFWorkspace(self.config)
-            workspace_instance = workspace.get_workspace_summary() if hasattr(workspace, "get_workspace_summary") else workspace  # noqa: E1101
-
-            if not workspace_instance:
-                return {'success': False, 'error': 'Workspace not found'}
+            workspace = SFWorkspace(self.config, workspace_id=workspace_id)
 
             from sfwebui import SpiderFootDb as SFDbWorkspace
             dbh = SFDbWorkspace(self.config)
             results = []
 
-            # Get scans from workspace
-            scans = getattr(workspace_instance, 'scans', [])
-            if scans:
-                for scan in scans[:limit]:  # Apply limit properly
-                    scan_data = dbh.scanResultSummary(scan.get('scan_id'))
-                    if scan_data:
-                        results.append(scan_data)
+            for scan in workspace.scans:
+                scan_id = scan.get('scan_id')
+                if not scan_id:
+                    continue
+                for row in dbh.scanResultEvent(scan_id):
+                    results.append({
+                        'timestamp': row[0],
+                        'event_type': row[4],
+                        'event_data': row[1],
+                        'source_module': row[2],
+                        'scan_id': scan_id
+                    })
+
+            results.sort(key=lambda r: r['timestamp'], reverse=True)
+            total_results = len(results)
 
             return {
                 'success': True,
                 'workspace_id': workspace_id,
-                'results': results
+                'results': results[:limit],
+                'total_results': total_results
             }
 
         except Exception as e:
