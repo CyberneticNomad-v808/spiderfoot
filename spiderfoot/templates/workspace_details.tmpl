@@ -742,14 +742,17 @@
                     </select>
                   </div>
                   <div class="col-md-6">
+                    <!-- Options are populated dynamically in
+                         populateUseCaseFilterOptions() from the live
+                         /modules payload's real 'group' (useCase) values
+                         -- this used to be 6 invented buckets ("Basic
+                         Discovery", "Stealth Reconnaissance", etc.)
+                         matched by guessing keywords in module names and
+                         descriptions, not by any real data. The actual
+                         useCase field only ever has 3 values: Footprint,
+                         Investigate, Passive. -->
                     <select class="form-control form-control-sm" id="moduleUseCaseFilter">
-                      <option value="">Filter by Use Case</option>
-                      <option value="basic">Basic Discovery</option>
-                      <option value="comprehensive">Comprehensive Audit</option>
-                      <option value="stealth">Stealth Reconnaissance</option>
-                      <option value="threat">Threat Assessment</option>
-                      <option value="compliance">Compliance Check</option>
-                      <option value="monitoring">Continuous Monitoring</option>
+                      <option value="">Filter by Use Case (All)</option>
                     </select>
                   </div>
                 </div>
@@ -1717,6 +1720,7 @@ function loadAvailableModules() {
             });
 
             populateCategoryFilterOptions(data);
+            populateUseCaseFilterOptions(data);
             displayModules();
             setupModuleFilters();
         } else {
@@ -1729,26 +1733,34 @@ function loadAvailableModules() {
     });
 }
 
-function populateCategoryFilterOptions(modules) {
-    var categories = {};
+function populateDropdownFromField(modules, field, selector) {
+    var values = {};
     modules.forEach(function(module) {
-        (module.cats || []).forEach(function(cat) {
-            categories[cat] = true;
+        (module[field] || []).forEach(function(v) {
+            values[v] = true;
         });
     });
 
-    var sortedCategories = Object.keys(categories).sort();
-    var $select = $('#moduleTypeFilter');
+    var sortedValues = Object.keys(values).sort();
+    var $select = $(selector);
     var currentValue = $select.val();
 
     $select.find('option[value!=""]').remove();
-    sortedCategories.forEach(function(cat) {
-        $select.append($('<option>').val(cat).text(cat));
+    sortedValues.forEach(function(v) {
+        $select.append($('<option>').val(v).text(v));
     });
 
-    if (currentValue && sortedCategories.indexOf(currentValue) !== -1) {
+    if (currentValue && sortedValues.indexOf(currentValue) !== -1) {
         $select.val(currentValue);
     }
+}
+
+function populateCategoryFilterOptions(modules) {
+    populateDropdownFromField(modules, 'cats', '#moduleTypeFilter');
+}
+
+function populateUseCaseFilterOptions(modules) {
+    populateDropdownFromField(modules, 'group', '#moduleUseCaseFilter');
 }
 
 function displayModules(filteredModules) {
@@ -1851,67 +1863,29 @@ function setupModuleFilters() {
 function applyModuleFilters(category, useCase) {
     var filteredModules = allModules;
 
-    // Filter by category. This checked module.group -- the useCases field
-    // (values like "Investigate"/"Passive"/"Footprint", already what the
-    // separate Use Case dropdown below filters on) -- against category-
-    // shaped dropdown options like "DNS & Domain"/"Search Engines"/"Social
-    // Networks". Since those vocabularies don't overlap, this never
-    // matched anything for almost every option, which is exactly why the
-    // filter looked like it did nothing. module.cats (the actual
-    // 'categories' field from each module's meta) is where those strings
-    // actually live. Matching is substring/case-insensitive against both
-    // cats and group (not an exact array-element match) since a few
-    // dropdown options ("Web", "Network", "OSINT", "Threat Intel",
-    // "Active") are broader buckets that don't correspond 1:1 to any
-    // single real category or useCase string in this codebase -- those
-    // will still return few or no results; giving them real, deliberate
-    // category mappings is a bigger task than this fix, not attempted
-    // here.
+    // Both dropdowns' options are now populated directly from the real
+    // module.cats / module.group values (see populateCategoryFilterOptions
+    // / populateUseCaseFilterOptions), so this is a straightforward
+    // case-insensitive substring match against the matching field --
+    // no more guessing, no more hardcoded option lists that can drift out
+    // of sync with what modules actually declare.
     if (category) {
         var needle = category.toLowerCase();
         filteredModules = filteredModules.filter(function(module) {
             var cats = (module.cats || []).map(function(c) { return String(c).toLowerCase(); });
-            var groups = (module.group || []).map(function(g) { return String(g).toLowerCase(); });
-            var haystack = cats.concat(groups).join(' ');
-            return haystack.indexOf(needle) !== -1;
+            return cats.join(' ').indexOf(needle) !== -1;
         });
     }
-    
-    // Filter by use case (based on module characteristics)
-    if (useCase) {
-        filteredModules = filteredModules.filter(function(module) {
-            return isModuleForUseCase(module, useCase);
-        });
-    }
-    
-    displayModules(filteredModules);
-}
 
-function isModuleForUseCase(module, useCase) {
-    var moduleName = module.name.toLowerCase();
-    var moduleDesc = (module.descr || '').toLowerCase();
-    var moduleGroup = (module.group || []).join(' ').toLowerCase();
-    
-    switch(useCase) {
-        case 'basic':
-            return moduleName.includes('dns') || moduleName.includes('whois') || 
-                   moduleName.includes('sslcert') || moduleName.includes('subdomain');
-        case 'comprehensive':
-            return true; // Include all modules for comprehensive scan
-        case 'stealth':
-            return moduleGroup.includes('passive') || moduleDesc.includes('passive');
-        case 'threat':
-            return moduleGroup.includes('threat') || moduleDesc.includes('threat') ||
-                   moduleName.includes('threat') || moduleName.includes('malware');
-        case 'compliance':
-            return moduleDesc.includes('ssl') || moduleDesc.includes('certificate') ||
-                   moduleDesc.includes('security') || moduleName.includes('ssl');
-        case 'monitoring':
-            return moduleDesc.includes('monitor') || moduleDesc.includes('continuous') ||
-                   moduleName.includes('alert');
-        default:
-            return true;
+    if (useCase) {
+        var useCaseNeedle = useCase.toLowerCase();
+        filteredModules = filteredModules.filter(function(module) {
+            var groups = (module.group || []).map(function(g) { return String(g).toLowerCase(); });
+            return groups.join(' ').indexOf(useCaseNeedle) !== -1;
+        });
     }
+
+    displayModules(filteredModules);
 }
 
 // Module preset functions
