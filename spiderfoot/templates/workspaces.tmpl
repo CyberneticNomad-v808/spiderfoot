@@ -193,6 +193,8 @@
                       <option value="Social">Social Networks</option>
                       <option value="Search Engines">Search Engines</option>
                       <option value="Secondary">Secondary Sources</option>
+                      <option value="Crawling and Scanning">Crawling & Scanning</option>
+                      <option value="Content Analysis">Content Analysis</option>
                     </select>
                   </div>
                   <div class="col-md-6">
@@ -1304,13 +1306,24 @@ function setupModuleFilters() {
 
 function applyModuleFilters(category, useCase) {
     var filteredModules = allModules;
-    
-    // Filter by category
+
+    // Filter by category. Same bug as workspace_details.tmpl's copy of
+    // this function: checked module.group (useCases -- already what the
+    // separate Use Case dropdown below filters on) instead of module.cats
+    // (the real 'categories' field), so this never matched anything for
+    // almost every dropdown option. Matching is substring/case-insensitive
+    // against both cats and group, same as the other template, since a
+    // few dropdown options ("Web", "Network", "OSINT", "Threat Intel",
+    // "Active") still don't correspond to any single real category or
+    // useCase string in this codebase -- those still return few or no
+    // results.
     if (category) {
+        var needle = category.toLowerCase();
         filteredModules = filteredModules.filter(function(module) {
-            return module.group && module.group.some(function(group) {
-                return group.toLowerCase().includes(category.toLowerCase());
-            });
+            var cats = (module.cats || []).map(function(c) { return String(c).toLowerCase(); });
+            var groups = (module.group || []).map(function(g) { return String(g).toLowerCase(); });
+            var haystack = cats.concat(groups).join(' ');
+            return haystack.indexOf(needle) !== -1;
         });
     }
     
