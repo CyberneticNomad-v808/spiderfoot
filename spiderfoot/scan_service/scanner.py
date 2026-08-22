@@ -495,8 +495,6 @@ class SpiderFootScanner():
         try:
             from spiderfoot.correlation.rule_executor import RuleExecutor
             from spiderfoot.correlation.event_enricher import EventEnricher
-            from spiderfoot.correlation.result_aggregator import ResultAggregator
-
             # Check if correlation rules exist
             if '__correlationrules__' not in self.__config:
                 self.__sf.error("No correlation rules found in configuration")
@@ -517,9 +515,15 @@ class SpiderFootScanner():
                 if 'events' in result:
                     result['events'] = enricher.enrich_sources(self.__scanId, result['events'])
                     result['events'] = enricher.enrich_entities(self.__scanId, result['events'])
-            aggregator = ResultAggregator()
-            agg_count = aggregator.aggregate(list(results.values()), method='count')
-            self.__sf.status(f"Correlated {agg_count} results for scan {self.__scanId}")
+            # ResultAggregator.aggregate(method='count') just does len() on
+            # whatever's passed in -- passing all per-rule results would
+            # count rules run (53), not correlations actually created. Sum
+            # the real per-rule counts instead so this status line matches
+            # what actually landed in tbl_scan_correlation_results.
+            correlated_count = sum(
+                r.get('correlations_created', 0) for r in results.values()
+            )
+            self.__sf.status(f"Correlated {correlated_count} results for scan {self.__scanId}")
         except Exception as e:
             # SpiderFoot.error() takes only a message -- exc_info isn't a
             # supported kwarg. Passing it raised TypeError from inside this
