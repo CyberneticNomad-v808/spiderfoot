@@ -74,6 +74,15 @@ services:
     init: true
     security_opt:
       - label:disable
+    # sfp_tool_nmap's binary is setcap'd (cap_net_raw,cap_net_admin=eip) in
+    # the Dockerfile, but that's a ceiling only -- a container's own
+    # capability bounding set caps what any setcap'd binary inside it can
+    # actually gain. Without these, confirmed live: `nmap --version` fails
+    # outright with "Operation not permitted" (exit 126), before nmap even
+    # gets to scanning anything.
+    cap_add:
+      - NET_RAW
+      - NET_ADMIN
     # Module API keys (SF__<MODULE>__<OPTION>=...) are set through Portainer's
     # own "Environment variables" UI, not a committed file — see .env.example
     # for the naming convention. Add each key you need under `environment:`
@@ -92,6 +101,15 @@ services:
       - SPIDERFOOT_DB_PASSWORD=${SPIDERFOOT_DB_PASSWORD}
       - REDIS_HOST=redis
       - REDIS_PORT=6379
+      # nmap's own privileged-scan check only trusts geteuid()==0 on this
+      # build (Debian bullseye's nmap 7.80) -- it doesn't auto-detect the
+      # cap_net_raw/cap_net_admin file capabilities granted below via
+      # cap_add + the Dockerfile's setcap, even though those capabilities
+      # are genuinely usable (confirmed live: `nmap -sS --privileged`
+      # succeeds; plain `nmap -sS` without this refuses with "requires
+      # root privileges"). This is nmap's own documented override for
+      # exactly this scenario -- no module code change needed.
+      - NMAP_PRIVILEGED=1
       # These had drifted: they were only ever in the ad-hoc StackUpdate
       # payload used to redeploy this stack, never actually committed
       # here despite this file's own header saying it's the source of

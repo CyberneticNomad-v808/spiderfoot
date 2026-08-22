@@ -181,20 +181,12 @@
                 <!-- Module filtering options -->
                 <div class="row" style="margin-bottom: 10px;">
                   <div class="col-md-6">
+                    <!-- Options are populated dynamically in
+                         populateCategoryFilterOptions() from the live
+                         /modules payload's real 'cats' values, not
+                         hardcoded -- see workspace_details.tmpl for why. -->
                     <select class="form-control form-control-sm" id="moduleTypeFilter">
-                      <option value="">Filter by Category</option>
-                      <option value="Passive">Passive Reconnaissance</option>
-                      <option value="Active">Active Scanning</option>
-                      <option value="DNS">DNS & Domain</option>
-                      <option value="Web">Web Applications</option>
-                      <option value="Network">Network & Infrastructure</option>
-                      <option value="OSINT">Open Source Intelligence</option>
-                      <option value="Threat Intel">Threat Intelligence</option>
-                      <option value="Social">Social Networks</option>
-                      <option value="Search Engines">Search Engines</option>
-                      <option value="Secondary">Secondary Sources</option>
-                      <option value="Crawling and Scanning">Crawling & Scanning</option>
-                      <option value="Content Analysis">Content Analysis</option>
+                      <option value="">Filter by Category (All)</option>
                     </select>
                   </div>
                   <div class="col-md-6">
@@ -1242,7 +1234,8 @@ function loadAvailableModules() {
                     modulesByCategory[category].push(module);
                 }
             });
-            
+
+            populateCategoryFilterOptions(data);
             displayModules();
             setupModuleFilters();
         } else {
@@ -1253,6 +1246,28 @@ function loadAvailableModules() {
         // Fallback to common modules if server request fails
         loadCommonModules();
     });
+}
+
+function populateCategoryFilterOptions(modules) {
+    var categories = {};
+    modules.forEach(function(module) {
+        (module.cats || []).forEach(function(cat) {
+            categories[cat] = true;
+        });
+    });
+
+    var sortedCategories = Object.keys(categories).sort();
+    var $select = $('#moduleTypeFilter');
+    var currentValue = $select.val();
+
+    $select.find('option[value!=""]').remove();
+    sortedCategories.forEach(function(cat) {
+        $select.append($('<option>').val(cat).text(cat));
+    });
+
+    if (currentValue && sortedCategories.indexOf(currentValue) !== -1) {
+        $select.val(currentValue);
+    }
 }
 
 function displayModules(filteredModules) {
