@@ -1821,11 +1821,30 @@ function setupModuleFilters() {
 
 function applyModuleFilters(category, useCase) {
     var filteredModules = allModules;
-    
-    // Filter by category
+
+    // Filter by category. This checked module.group -- the useCases field
+    // (values like "Investigate"/"Passive"/"Footprint", already what the
+    // separate Use Case dropdown below filters on) -- against category-
+    // shaped dropdown options like "DNS & Domain"/"Search Engines"/"Social
+    // Networks". Since those vocabularies don't overlap, this never
+    // matched anything for almost every option, which is exactly why the
+    // filter looked like it did nothing. module.cats (the actual
+    // 'categories' field from each module's meta) is where those strings
+    // actually live. Matching is substring/case-insensitive against both
+    // cats and group (not an exact array-element match) since a few
+    // dropdown options ("Web", "Network", "OSINT", "Threat Intel",
+    // "Active") are broader buckets that don't correspond 1:1 to any
+    // single real category or useCase string in this codebase -- those
+    // will still return few or no results; giving them real, deliberate
+    // category mappings is a bigger task than this fix, not attempted
+    // here.
     if (category) {
+        var needle = category.toLowerCase();
         filteredModules = filteredModules.filter(function(module) {
-            return module.group && module.group.indexOf(category) !== -1;
+            var cats = (module.cats || []).map(function(c) { return String(c).toLowerCase(); });
+            var groups = (module.group || []).map(function(g) { return String(g).toLowerCase(); });
+            var haystack = cats.concat(groups).join(' ');
+            return haystack.indexOf(needle) !== -1;
         });
     }
     
