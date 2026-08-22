@@ -528,6 +528,8 @@ class SpiderFootDb:
         return self._scan.scanInstanceDelete(*args, **kwargs)
     def scanInstanceList(self):
         return self._scan.scanInstanceList()
+    def reconcileStaleScans(self) -> int:
+        return self._scan.reconcileStaleScans()
     def scanInstanceSet(self, instanceId: str, started: str = None, ended: str = None, status: str = None):
         """
         Direct pass-through to the underlying _scan.scanInstanceSet method.

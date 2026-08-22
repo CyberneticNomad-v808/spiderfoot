@@ -375,10 +375,29 @@ class SpiderFootOrchestrator:
     def handle_server_startup(self, args) -> None:
         """
         Handle server startup based on arguments.
-        
+
         Args:
             args: Parsed command line arguments
         """
+        # A fresh process can't possibly own any scan left in an active
+        # status from before it started (module threads and scanner
+        # state are entirely in-process, never recovered across a
+        # restart) -- reconcile those to ABORTED now, once, before
+        # serving anything. See reconcileStaleScans() for the incident
+        # this fixes: a scan sat RUNNING for over an hour with no new
+        # results, because the container had been redeployed since it
+        # started.
+        try:
+            dbh = SpiderFootDb(self.config, init=True)
+            reconciled = dbh.reconcileStaleScans()
+            if reconciled:
+                self.log.info(
+                    f"Reconciled {reconciled} stale scan(s) left RUNNING "
+                    f"by a prior process to ABORTED."
+                )
+        except Exception as e:
+            self.log.error(f"Failed to reconcile stale scans at startup: {e}")
+
         # Prepare server configurations
         web_config = self.config_manager.get_web_config()
         api_config = self.config_manager.get_api_config()
