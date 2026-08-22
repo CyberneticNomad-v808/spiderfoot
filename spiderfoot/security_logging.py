@@ -63,13 +63,28 @@ class SecurityLogger:
         # Remove existing handlers to avoid duplicates
         self.logger.handlers.clear()
 
-        # File handler for security events
-        file_handler = logging.FileHandler(self.log_file, encoding='utf-8')
-        file_formatter = logging.Formatter(
-            '%(asctime)s - %(levelname)s - %(message)s'
-        )
-        file_handler.setFormatter(file_formatter)
-        self.logger.addHandler(file_handler)
+        # File handler for security events. This is a module-level singleton
+        # created at import time (see bottom of file) -- if it raises, every
+        # module that imports security_middleware fails to import, which
+        # crashes the whole app before it can even serve a health check.
+        # A container recreated with mismatched volume ownership (seen live:
+        # rootless-Podman UID/namespace drift across container recreations
+        # leaving the log directory owned by a UID that no longer matches
+        # this container's own "spiderfoot" UID) must not be fatal to
+        # startup -- fall back to console-only logging instead.
+        try:
+            file_handler = logging.FileHandler(self.log_file, encoding='utf-8')
+            file_formatter = logging.Formatter(
+                '%(asctime)s - %(levelname)s - %(message)s'
+            )
+            file_handler.setFormatter(file_formatter)
+            self.logger.addHandler(file_handler)
+        except OSError as e:
+            sys.stderr.write(
+                f"security_logging: could not open {self.log_file} for "
+                f"writing ({e}); continuing with console-only security "
+                f"logging.\n"
+            )
 
         # Console handler
         if console_output:
