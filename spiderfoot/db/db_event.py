@@ -780,9 +780,19 @@ class EventManager:
         """
         Search for events in the scan results matching the given criteria.
 
-        Supported keys: scan_id (required), type, data, module,
-        start_date, end_date. Returns a list of matching rows, similar to
-        the legacy API.
+        Supported keys: scan_id (required), type, data, module, value,
+        regex, start_date, end_date.
+
+        Returns rows shaped (generated, data, source_data, module, type,
+        confidence, visibility, risk, hash, source_event_hash, event_descr,
+        event_type, scan_instance_id, false_positive, parent_false_positive)
+        -- restored from this project's own pre-refactor db.py.backup, which
+        every caller of this method (webui searchBase() in both
+        webui/helpers.py and webui/routes.py, and the FastAPI search-export
+        endpoint) still indexes into. The previous 9-column version silently
+        broke all three: they either raised IndexError past column 8 (caught
+        by a bare except and returned as empty results) or read the wrong
+        field entirely.
         """
         if not isinstance(criteria, dict):
             raise TypeError("criteria must be a dict")
@@ -794,40 +804,54 @@ class EventManager:
                 "criteria must include a valid 'scan_id' string"
             )
         ph = get_placeholder(self.db_type)
-        # Legacy tuple order: generated, data, module, hash, type,
-        # source_event_hash, confidence, visibility, risk
         qry = (
-            f"SELECT ROUND(generated) AS generated, data, module, hash, "
-            f"type, source_event_hash, confidence, visibility, risk "
-            f"FROM tbl_scan_results WHERE scan_instance_id = {ph}"
+            f"SELECT ROUND(c.generated) AS generated, c.data, "
+            f"COALESCE(s.data, 'ROOT') AS source_data, c.module, c.type, "
+            f"c.confidence, c.visibility, c.risk, c.hash, "
+            f"c.source_event_hash, t.event_descr, t.event_type, "
+            f"c.scan_instance_id, c.false_positive AS fp, "
+            f"COALESCE(s.false_positive, 0) AS parent_fp "
+            f"FROM tbl_scan_results c "
+            f"JOIN tbl_event_types t ON t.event = c.type "
+            f"LEFT JOIN tbl_scan_results s ON s.hash = c.source_event_hash "
+            f"AND s.scan_instance_id = c.scan_instance_id "
+            f"WHERE c.scan_instance_id = {ph}"
         )
         qvars = [scan_id]
         if 'type' in criteria and criteria['type']:
-            qry += f" AND type = {ph}"
+            qry += f" AND c.type = {ph}"
             qvars.append(criteria['type'])
         if 'data' in criteria and criteria['data']:
-            qry += f" AND data = {ph}"
+            qry += f" AND c.data = {ph}"
             qvars.append(criteria['data'])
         if 'module' in criteria and criteria['module']:
-            qry += f" AND module = {ph}"
+            qry += f" AND c.module = {ph}"
             qvars.append(criteria['module'])
+        if 'value' in criteria and criteria['value']:
+            qry += f" AND (c.data LIKE {ph} OR s.data LIKE {ph})"
+            qvars.append(criteria['value'])
+            qvars.append(criteria['value'])
+        if 'regex' in criteria and criteria['regex']:
+            qry += f" AND (c.data ~ {ph} OR s.data ~ {ph})"
+            qvars.append(criteria['regex'])
+            qvars.append(criteria['regex'])
         if 'start_date' in criteria and criteria['start_date']:
-            qry += f" AND generated >= {ph}"
+            qry += f" AND c.generated >= {ph}"
             start = criteria['start_date']
             if start > 1000000000000:  # already ms
                 qvars.append(start)
             else:
                 qvars.append(int(start * 1000))
         if 'end_date' in criteria and criteria['end_date']:
-            qry += f" AND generated <= {ph}"
+            qry += f" AND c.generated <= {ph}"
             end = criteria['end_date']
             if end > 1000000000000:
                 qvars.append(end)
             else:
                 qvars.append(int(end * 1000))
         if filterFp:
-            qry += " AND false_positive <> 1"
-        qry += " ORDER BY generated DESC"
+            qry += " AND c.false_positive <> 1"
+        qry += " ORDER BY c.data"
         with self.dbhLock:
             try:
                 self.dbh.execute(qry, qvars)

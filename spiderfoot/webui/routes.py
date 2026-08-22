@@ -891,14 +891,16 @@ class WebUiRoutes(SettingsEndpoints, ScanEndpoints, ExportEndpoints, WorkspaceEn
         except Exception:
             return retdata
 
+        # See webui/helpers.py's searchBase() for the full explanation of
+        # this row shape (restored from db.py.backup's original 15-column
+        # search() query) and why the previous indices crashed.
         for row in data:
             lastseen = time.strftime(
                 "%Y-%m-%d %H:%M:%S", time.localtime(row[0]))
             escapeddata = html.escape(row[1])
             escapedsrc = html.escape(row[2])
             retdata.append([lastseen, escapeddata, escapedsrc,
-                            row[3], row[5], row[6], row[7], row[8], row[10],
-                            row[11], row[4], row[13], row[14]])
+                            row[3], row[9], row[5], row[6], row[7], row[4]])
 
         return retdata
 
