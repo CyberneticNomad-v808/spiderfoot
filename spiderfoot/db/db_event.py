@@ -136,11 +136,11 @@ class EventManager:
             raise TypeError(f"instanceId is {type(instanceId)}; expected str()")
         ph = get_placeholder(self.db_type)
         qry = (
-            f"SELECT generated AS generated, component, type, message, rowid "
+            f"SELECT generated AS generated, component, type, message, id AS rowid "
             f"FROM tbl_scan_log WHERE scan_instance_id = {ph}"
         )
         if fromRowId:
-            qry += f" and rowid > {ph}"
+            qry += f" and id > {ph}"
         qry += " ORDER BY generated "
         if reverse:
             qry += "ASC"
@@ -266,6 +266,42 @@ class EventManager:
             except (psycopg2.Error) as e:
                 raise IOError(
                     "SQL error encountered when fetching result events"
+                ) from e
+
+    def scanResultEventForGraph(self, instanceId: str, filterFp: bool = False) -> list:
+        """Return scan result rows shaped for graph building
+        (SpiderFootHelpers.buildGraphData/buildGraphJson/buildGraphGexf).
+
+        Each row is (data, parent_data, type, event_type_category, hash):
+        parent_data is the source event's own data value (resolved via a
+        self-join on source_event_hash), not just the hash reference that
+        scanResultEvent() returns -- buildGraphData needs the actual parent
+        label to draw an edge. 'ROOT' parents (or missing source events, e.g.
+        due to false-positive filtering) fall back to the literal 'ROOT'
+        label, which callers already special-case and skip.
+        """
+        if not isinstance(instanceId, str):
+            raise TypeError(f"instanceId is {type(instanceId)}; expected str()")
+        ph = get_placeholder(self.db_type)
+        qry = (
+            f"SELECT c.data, COALESCE(p.data, 'ROOT') AS parent_data, "
+            f"c.type, e.event_type, c.hash "
+            f"FROM tbl_scan_results c "
+            f"JOIN tbl_event_types e ON e.event = c.type "
+            f"LEFT JOIN tbl_scan_results p ON p.hash = c.source_event_hash "
+            f"AND p.scan_instance_id = c.scan_instance_id "
+            f"WHERE c.scan_instance_id = {ph}"
+        )
+        if filterFp:
+            qry += " AND c.false_positive <> 1"
+        qvars = [instanceId]
+        with self.dbhLock:
+            try:
+                self.dbh.execute(qry, qvars)
+                return self.dbh.fetchall()
+            except (psycopg2.Error) as e:
+                raise IOError(
+                    "SQL error encountered when fetching graph data"
                 ) from e
 
     def scanResultEventUnique(

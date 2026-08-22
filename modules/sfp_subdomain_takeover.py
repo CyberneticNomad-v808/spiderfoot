@@ -50,11 +50,17 @@ class sfp_subdomain_takeover(SpiderFootPlugin):
 
         content = self.sf.cacheGet("subjack-fingerprints", 48)
         if content is None:
-            url = "https://raw.githubusercontent.com/haccer/subjack/master/fingerprints.json"
+            # The original haccer/subjack fingerprints.json this module was
+            # written against no longer exists upstream (subjack dropped the
+            # separate JSON file entirely). EdOverflow/can-i-take-over-xyz is
+            # the actively-maintained equivalent -- same idea (cname/service/
+            # fingerprint/nxdomain per entry) but 'fingerprint' is a single
+            # string there rather than a list, normalised below.
+            url = "https://raw.githubusercontent.com/EdOverflow/can-i-take-over-xyz/master/fingerprints.json"
             res = self.sf.fetchUrl(url, useragent="SpiderFoot")
 
-            if res['content'] is None:
-                self.error(f"Unable to fetch {url}")
+            if res['content'] is None or res.get('code') != '200':
+                self.error(f"Unable to fetch {url} (HTTP {res.get('code')})")
                 self.errorState = True
                 return
 
@@ -68,6 +74,16 @@ class sfp_subdomain_takeover(SpiderFootPlugin):
                 f"Unable to parse subdomain takeover fingerprints list: {e}")
             self.errorState = True
             return
+
+        # Normalise 'fingerprint' to always be a list: the current source
+        # stores a single string there, but the rest of this module expects
+        # to iterate over a list of candidate fingerprint substrings.
+        for entry in self.fingerprints:
+            fp = entry.get("fingerprint")
+            if isinstance(fp, str):
+                entry["fingerprint"] = [fp]
+            elif fp is None:
+                entry["fingerprint"] = []
 
     # What events is this module interested in for input
     def watchedEvents(self):
