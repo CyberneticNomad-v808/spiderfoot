@@ -24,11 +24,17 @@ services:
     image: postgres:16-alpine
     container_name: number-two-scope-postgres
     restart: unless-stopped
-    # SpiderFoot opens one DB connection per module thread; an "All modules"
-    # scan (270+ modules) exhausts Postgres's default max_connections=100
-    # almost immediately, breaking the webui (scanlog, scanlist, etc.) for
-    # the whole scan's duration. Raise it well above realistic module counts.
-    command: ["-c", "max_connections=300"]
+    # SpiderFoot opens one DB connection per module thread, held for the
+    # whole scan (not just briefly) -- an "All modules" scan (270+ modules)
+    # needs 270+ connections simultaneously, and running several concurrent
+    # "All modules" scans (e.g. a multi-target workspace scan) multiplies
+    # that further. 300 was already exceeded live by 4 concurrent all-
+    # modules scans (~1080 connections needed); 5000 covers a much larger
+    # concurrent load. This is a command-line flag specifically because it
+    # overrides ALTER SYSTEM / postgresql.conf -- Postgres's precedence
+    # order puts -c above both, so changing this file is the only way to
+    # actually change max_connections for this container going forward.
+    command: ["-c", "max_connections=5000"]
     security_opt:
       - label:disable
     environment:
