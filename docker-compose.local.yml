@@ -19,3 +19,5 @@ services:
 networks:
   blking_private_network:
     external: false
+  tor_proxy_network:
+    external: false
