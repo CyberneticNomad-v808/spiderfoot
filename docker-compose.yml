@@ -110,6 +110,30 @@ services:
       # root privileges"). This is nmap's own documented override for
       # exactly this scenario -- no module code change needed.
       - NMAP_PRIVILEGED=1
+      # Tool binary paths for the sfp_tool_* modules. These were set by
+      # hand via direct SQL against the live database when discovered
+      # empty (every one of these modules was silently non-functional
+      # despite its binary being installed) -- that fix didn't survive a
+      # fresh deploy with a new database. Made repeatable via
+      # apply_env_config_overrides() in sf_orchestrator.py, which seeds
+      # tbl_config from SF__<SCOPE>__<OPT> env vars at every startup.
+      # Not secrets -- these are fixed paths inside this image, so plain
+      # literal values here (not ${VAR} references) are correct, same as
+      # SPIDERFOOT_DB_HOST=postgres above.
+      - SF__SFP_TOOL_NMAP__NMAPPATH=/usr/bin/nmap
+      - SF__SFP_TOOL_NBTSCAN__NBTSCAN_PATH=/usr/bin/nbtscan
+      - SF__SFP_TOOL_ONESIXTYONE__ONESIXTYONE_PATH=/usr/bin/onesixtyone
+      - SF__SFP_TOOL_WHATWEB__WHATWEB_PATH=/usr/bin/whatweb
+      - SF__SFP_TOOL_WAFW00F__WAFW00F_PATH=/opt/venv/bin/wafw00f
+      - SF__SFP_TOOL_TRUFFLEHOG__TRUFFLEHOG_PATH=/opt/venv/bin/trufflehog
+      - SF__SFP_TOOL_SNALLYGASTER__SNALLYGASTER_PATH=/opt/venv/bin/snallygaster
+      - SF__SFP_TOOL_NUCLEI__NUCLEI_PATH=/tools/bin/nuclei
+      - SF__SFP_TOOL_NUCLEI__TEMPLATE_PATH=/tools/nuclei-templates
+      - SF__SFP_TOOL_RETIREJS__RETIREJS_PATH=/tools/bin/retire
+      - SF__SFP_TOOL_TESTSSLSH__TESTSSLSH_PATH=/tools/testssl.sh/testssl.sh
+      - SF__SFP_TOOL_CMSEEK__CMSEEKPATH=/tools/CMSeeK/cmseek.py
+      - SF__SFP_TOOL_DNSTWIST__DNSTWISTPATH=/opt/venv/bin/dnstwist
+      - SF__SFP_TOOL_GOBUSTER__GOBUSTER_PATH=/tools/bin/gobuster
       # These had drifted: they were only ever in the ad-hoc StackUpdate
       # payload used to redeploy this stack, never actually committed
       # here despite this file's own header saying it's the source of
