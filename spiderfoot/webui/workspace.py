@@ -242,6 +242,25 @@ class WorkspaceEndpoints:
             return {"success": False, "error": str(e)}
 
     @cherrypy.expose
+    @cherrypy.tools.json_out()
+    def workspaceruncorrelations(self, workspace_id):
+        # This endpoint didn't exist at all -- confirmed live, a 404 --
+        # which is why workspace_details.tmpl's "Run Correlation
+        # Analysis" button always failed with "Failed to start
+        # correlation analysis: Server error" (jQuery's .fail() callback,
+        # triggered by any non-2xx response). See
+        # SpiderFootWorkspace.run_cross_scan_correlations() for why this
+        # needed a real cross-scan implementation, not just a stub: the
+        # existing per-scan correlation (scan_service/scanner.py) never
+        # ran with more than one scan's own ID.
+        try:
+            ws = SpiderFootWorkspace(self.config, workspace_id=workspace_id)
+            correlated_count = ws.run_cross_scan_correlations()
+            return {"success": True, "correlations_created": correlated_count}
+        except Exception as e:
+            return {"success": False, "error": str(e)}
+
+    @cherrypy.expose
     def workspacedetails(self, workspace_id):
         try:
             ws = SpiderFootWorkspace(self.config, workspace_id=workspace_id)
