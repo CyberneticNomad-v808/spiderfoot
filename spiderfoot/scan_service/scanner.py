@@ -521,7 +521,17 @@ class SpiderFootScanner():
             agg_count = aggregator.aggregate(list(results.values()), method='count')
             self.__sf.status(f"Correlated {agg_count} results for scan {self.__scanId}")
         except Exception as e:
-            self.__sf.error(f"Failed to run correlations for scan {self.__scanId}: {e}", exc_info=True)
+            # SpiderFoot.error() takes only a message -- exc_info isn't a
+            # supported kwarg. Passing it raised TypeError from inside this
+            # except block, which masked whatever the real correlation
+            # failure was (e.g. the get_sources()/get_entities() '?'
+            # placeholder bug, real errors are logged now that this crashes
+            # itself) and propagated uncaught out of __startScan(), skipping
+            # the "Scan ... completed." status update.
+            self.__sf.error(
+                f"Failed to run correlations for scan {self.__scanId}: "
+                f"{e}\n{traceback.format_exc()}"
+            )
 
     def waitForThreads(self) -> None:
         if not self.eventQueue:

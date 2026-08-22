@@ -714,14 +714,15 @@ class EventManager:
         return datamap
 
     def get_sources(self, scan_id: str, event_hash: str) -> list:
-        qry = """
+        ph = get_placeholder(self.db_type)
+        qry = f"""
             SELECT s.hash, s.type, s.data, s.module, s.generated,
                    s.source_event_hash
             FROM tbl_scan_results c
             JOIN tbl_scan_results s
               ON c.source_event_hash = s.hash
-            WHERE c.scan_instance_id = ?
-              AND c.hash = ?
+            WHERE c.scan_instance_id = {ph}
+              AND c.hash = {ph}
               AND c.source_event_hash != 'ROOT'
         """
         qvars = [scan_id, event_hash]
@@ -746,12 +747,13 @@ class EventManager:
                 ) from e
 
     def get_entities(self, scan_id: str, event_hash: str) -> list:
-        qry = """
+        ph = get_placeholder(self.db_type)
+        qry = f"""
             SELECT c.hash, c.type, c.data, c.module, c.generated,
                    c.source_event_hash
             FROM tbl_scan_results c
-            WHERE c.scan_instance_id = ?
-              AND c.source_event_hash = ?
+            WHERE c.scan_instance_id = {ph}
+              AND c.source_event_hash = {ph}
               AND c.type IN (
                 SELECT event FROM tbl_event_types
                 WHERE event_type = 'ENTITY'
