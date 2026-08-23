@@ -1003,6 +1003,13 @@ $('a[href="#results-tab"]').on('shown.bs.tab', function() {
     loadResults();
 });
 
+// Re-load results when the event-type filter changes -- nothing was
+// bound to this before, so picking a value in the dropdown had no
+// effect at all on the displayed table.
+$('#resultsFilter').on('change', function() {
+    loadResults();
+});
+
 // Load periodic scans when tab is clicked
 $('a[href="#schedules-tab"]').on('shown.bs.tab', function() {
     loadPeriodicScans();
@@ -1096,7 +1103,12 @@ function loadCorrelations() {
 }
 
 function loadResults() {
-    $.get('${docroot}/workspacescanresults', {workspace_id: '${workspace.workspace_id}', limit: 50})
+    var eventType = $('#resultsFilter').val();
+    var params = {workspace_id: '${workspace.workspace_id}', limit: 50};
+    if (eventType) {
+        params.event_type = eventType;
+    }
+    $.get('${docroot}/workspacescanresults', params)
         .done(function(data) {
             if (data.success) {
                 var html = '';

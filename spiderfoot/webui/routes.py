@@ -1254,12 +1254,16 @@ class WebUiRoutes(SettingsEndpoints, ScanEndpoints, ExportEndpoints, WorkspaceEn
 
     @cherrypy.expose
     @cherrypy.tools.json_out()
-    def workspacescanresults(self, workspace_id, limit=100):
+    def workspacescanresults(self, workspace_id, limit=100, event_type=None):
         """Get workspace scan results.
 
         Args:
             workspace_id: Workspace ID to retrieve results for
             limit: Maximum results to return (default 100)
+            event_type: Optional event type prefix to filter by (matches
+                workspace_details.tmpl's #resultsFilter dropdown values --
+                exact for INTERNET_NAME/IP_ADDRESS/EMAILADDR, prefix for
+                the VULNERABILITY_* / MALICIOUS_* families)
         """
         try:
             # Convert string limit to int if needed
@@ -1311,6 +1315,24 @@ class WebUiRoutes(SettingsEndpoints, ScanEndpoints, ExportEndpoints, WorkspaceEn
                         'source_module': row[2],
                         'scan_id': scan_id
                     })
+
+            # #resultsFilter's dropdown never actually filtered anything --
+            # this endpoint (the one CherryPy's MRO actually dispatches to;
+            # webui/workspace.py has an event_type-aware same-named method
+            # that's shadowed and never runs) didn't accept an event_type
+            # param at all, workspace_details.tmpl's loadResults() never
+            # read the dropdown's value or sent it, and nothing was bound
+            # to the dropdown's change event to even trigger a reload.
+            # Prefix match, not exact: INTERNET_NAME/IP_ADDRESS/EMAILADDR
+            # are real event types (exact match), but VULNERABILITY and
+            # MALICIOUS are families (VULNERABILITY_CVE_CRITICAL,
+            # MALICIOUS_IPADDR, etc.), not real event type strings on
+            # their own.
+            if event_type:
+                results = [
+                    r for r in results
+                    if r['event_type'].startswith(event_type)
+                ]
 
             results.sort(key=lambda r: r['timestamp'], reverse=True)
             total_results = len(results)
